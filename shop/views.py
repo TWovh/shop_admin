@@ -19,8 +19,6 @@ class CategoryDetailView(generics.RetrieveAPIView):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
 
-from django.http import HttpResponse
-
 def home(request):
     return HttpResponse("""
         <h1>Добро пожаловать в магазин</h1>
