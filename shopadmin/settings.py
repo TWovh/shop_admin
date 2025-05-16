@@ -62,7 +62,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'shop',
         'USER': 'postgres',
-        'PASSWORD': 'postgres',
+        'PASSWORD': 'death1965',
         'HOST': 'db' if os.getenv('DOCKER') == 'yes' else 'localhost',
         'PORT': '5432',
     }

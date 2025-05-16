@@ -1,5 +1,6 @@
 from django.db import models
 from django.urls import reverse
+from django.db.models import Index
 
 
 class Category(models.Model):
@@ -31,7 +32,9 @@ class Product(models.Model):
 
     class Meta:
         ordering = ('name',)
-        index_together = (('id', 'slug'),)
+        indexes = [
+            Index(fields=['id', 'slug']),
+        ]
 
     def __str__(self):
         return self.name
