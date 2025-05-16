@@ -1,10 +1,12 @@
 from pathlib import Path
 import os
 from datetime import timedelta
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+load_dotenv()
 SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = True
 
@@ -14,13 +16,15 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    'rest_framework',
-    'shop.apps.ShopConfig',
+    "rest_framework",
+    "shop.apps.ShopConfig",
+
 ]
 
 MIDDLEWARE = [

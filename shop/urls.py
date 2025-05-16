@@ -4,8 +4,11 @@ from . import views
 app_name = 'shop'
 
 urlpatterns = [
-    path('api/products/', views.ProductListView.as_view(), name='product_list'),
-    path('api/products/<int:pk>/', views.ProductDetailView.as_view(), name='product_detail'),
-    path('api/categories/', views.CategoryListView.as_view(), name='category_list'),
-    path('api/categories/<int:pk>/', views.CategoryDetailView.as_view(), name='category_detail'),
+    # URL для продуктов
+    path('', views.ProductListView.as_view(), name='product_list'),  # Список продуктов
+    path('<int:pk>/', views.ProductDetailView.as_view(), name='product_detail'),  # Детали продукта
+
+    # URL для категорий
+    path('categories/', views.CategoryListView.as_view(), name='category_list'),  # Список категорий
+    path('categories/<int:pk>/', views.CategoryDetailView.as_view(), name='category_detail'),  # Детали категории
 ]
