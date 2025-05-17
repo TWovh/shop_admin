@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Ваша корзина</h1>
+<div id="cart-items">
+    <!-- Сюда будет загружаться содержимое корзины через AJAX -->
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    fetch('/api/cart/')
+        .then(response => response.json())
+        .then(data => {
+            const cartHtml = data.items.map(item => `
+                <div class="cart-item">
+                    <h3>${item.product}</h3>
+                    <p>Количество: ${item.quantity}</p>
+                    <p>Цена: ${item.total_price} $.</p>
+                </div>
+            `).join('');
+            document.getElementById('cart-items').innerHTML = cartHtml;
+        });
+});
+</script>
+{% endblock %}
