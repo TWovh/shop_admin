@@ -1,7 +1,13 @@
 from rest_framework import generics
-from .models import Product, Category
-from .serializers import ProductSerializer, CategorySerializer
 from django.http import HttpResponse
+from .serializers import ProductSerializer, CategorySerializer
+from .cart_serializers import CartItemSerializer, AddToCartSerializer
+from .models import Product, Category, Cart, CartItem
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+
 
 class ProductListView(generics.ListAPIView):
     queryset = Product.objects.filter(available=True)
@@ -29,3 +35,31 @@ def home(request):
             <li><a href="/admin/">Админка</a></li>
         </ul>
     """)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def cart_detail(request):
+    cart, created = Cart.objects.get_or_create(user=request.user)
+    serializer = CartItemSerializer(cart.items.all(), many=True)
+    return Response({
+        'items': serializer.data,
+        'total_price': cart.total_price()
+    })
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def add_to_cart(request):
+    serializer = AddToCartSerializer(data=request.data)
+    if serializer.is_valid():
+        product = Product.objects.get(id=serializer.validated_data['product_id'])
+        cart, created = Cart.objects.get_or_create(user=request.user)
+        item, created = CartItem.objects.get_or_create(
+            cart=cart,
+            product=product,
+            defaults={'quantity': serializer.validated_data['quantity']}
+        )
+        if not created:
+            item.quantity += serializer.validated_data['quantity']
+            item.save()
+        return Response({'status': 'success'})
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
