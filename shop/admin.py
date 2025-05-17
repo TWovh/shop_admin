@@ -1,5 +1,4 @@
 from django.contrib import admin
-from .models import Category, Product
 from django.urls import reverse
 from django import forms
 from .models import Product, Category
@@ -15,7 +14,7 @@ class ProductAdminForm(forms.ModelForm):
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
     list_display = ['name', 'slug']
-    prepopulated_fields = {'slug': ('name',)}
+    prepopulated_fields = {'slug': ('name',)} # генератор людских ссылок при добавлении продукта
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
@@ -25,7 +24,8 @@ class ProductAdmin(admin.ModelAdmin):
     list_editable = ('price', 'available')
     search_fields = ('name', 'description')
     prepopulated_fields = {'slug': ('name',)}
-    readonly_fields = ('image_preview',)
+    readonly_fields = ('image_preview', 'created', 'updated')
+
     fieldsets = (
         (None, {
             'fields': ('name', 'slug', 'category')
