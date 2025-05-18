@@ -21,14 +21,16 @@
 
 1. Клонируйте репозиторий:
 git clone https://github.com/TWovh/shopadmin.git
+
 cd shopadmin
 
-2. Создайте и активируйте виртуальное окружение:
+3. Создайте и активируйте виртуальное окружение:
 python -m venv venv
+
 source venv/bin/activate  # Linux/Mac
 venv\Scripts\activate     # Windows
 
-3. Установите зависимости:
+5. Установите зависимости:
 
 pip install -r requirements.txt
 
