@@ -1,0 +1,174 @@
+{% extends "admin/base_site.html" %}
+{% load humanize %}
+
+{% block content %}
+<div class="statistics">
+    <h1>Детальная статистика</h1>
+
+    <!-- Фильтры по дате -->
+    <div class="filters">
+        <form method="get">
+            <label for="start_date">С:</label>
+            <input type="date" id="start_date" name="start_date" value="{{ request.GET.start_date }}">
+
+            <label for="end_date">По:</label>
+            <input type="date" id="end_date" name="end_date" value="{{ request.GET.end_date }}">
+
+            <button type="submit">Применить</button>
+            <a href="?" class="button">Сбросить</a>
+        </form>
+    </div>
+
+    <!-- Основные метрики -->
+    <div class="metrics">
+        <div class="metric-card">
+            <h3>Общий объем продаж</h3>
+            <p>{{ total_sales|intcomma }} ₽</p>
+        </div>
+
+        <div class="metric-card">
+            <h3>Количество заказов</h3>
+            <p>{{ orders_count }}</p>
+        </div>
+    </div>
+
+    <!-- Таблица заказов -->
+    <h2>Последние заказы</h2>
+    <table class="orders-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Клиент</th>
+                <th>Дата</th>
+                <th>Сумма</th>
+                <th>Статус</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for order in recent_orders %}
+            <tr>
+                <td>
+                    <a href="{% url 'admin:shop_order_change' order.id %}">
+                        #{{ order.id }}
+                    </a>
+                </td>
+                <td>{{ order.user.get_full_name|default:order.user.username }}</td>
+                <td>{{ order.created|date:"d.m.Y H:i" }}</td>
+                <td>{{ order.total_price|intcomma }} ₽</td>
+                <td>
+                    <span class="status-badge {{ order.status }}">
+                        {{ order.get_status_display }}
+                    </span>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- График продаж по категориям -->
+    <h2>Продажи по категориям</h2>
+    <div class="chart-container">
+        <canvas id="categoriesChart"></canvas>
+    </div>
+</div>
+
+<!-- Подключение Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // График по категориям
+    new Chart(document.getElementById('categoriesChart'), {
+        type: 'bar',
+        data: {
+            labels: {{ categories_labels|safe }},
+            datasets: [{
+                label: 'Продажи (₽)',
+                data: {{ categories_values|safe }},
+                backgroundColor: '#417690'
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            }
+        }
+    });
+});
+</script>
+
+<style>
+.statistics {
+    padding: 20px;
+}
+.filters {
+    background: #f8f8f8;
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 4px;
+}
+.filters label {
+    margin-right: 5px;
+    font-weight: bold;
+}
+.metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 15px;
+    margin-bottom: 30px;
+}
+.metric-card {
+    background: white;
+    padding: 20px;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+.metric-card h3 {
+    margin-top: 0;
+    color: #666;
+    font-size: 1em;
+}
+.metric-card p {
+    font-size: 1.8em;
+    margin: 10px 0 0;
+    color: #417690;
+}
+.orders-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 30px;
+}
+.orders-table th,
+.orders-table td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+}
+.orders-table th {
+    background-color: #f5f5f5;
+}
+.status-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 0.9em;
+}
+.status-badge.new {
+    background: #d4edda;
+    color: #155724;
+}
+.status-badge.processing {
+    background: #cce5ff;
+    color: #004085;
+}
+.chart-container {
+    background: white;
+    padding: 20px;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+}
+</style>
+{% endblock %}

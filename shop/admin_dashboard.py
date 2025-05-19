@@ -67,15 +67,34 @@ class AdminDashboard(admin.AdminSite):
         return super().index(request, extra_context)
 
     def statistics_view(self, request):
-        stats = self.get_dashboard_stats()
+        start_date = request.GET.get('start_date')
+        end_date = request.GET.get('end_date')
+
+        orders = Order.objects.all()
+
+        if start_date:
+            orders = orders.filter(created__gte=start_date)
+        if end_date:
+            orders = orders.filter(created__lte=end_date)
+        categories_stats = (
+            Category.objects
+            .annotate(total_sales=Sum('products__order_items__price'))
+            .exclude(total_sales=None)
+            .order_by('-total_sales')
+        )
+
         context = {
-            **stats,
+            'total_sales': orders.aggregate(total=Sum('total_price'))['total'] or 0,
+            'orders_count': orders.count(),
+            'recent_orders': orders.order_by('-created')[:10],
+            'categories_labels': [cat.name for cat in categories_stats],
+            'categories_values': [float(cat.total_sales) for cat in categories_stats],
             **self.each_context(request),
-            'title': 'Детальная статистика',
+            'title': 'Статистика продаж',
         }
         return render(request, 'admin/statistics.html', context)
 
-# Заменяем стандартную админку
+# Замена админки через эту команду
 admin_site = AdminDashboard(name='myadmin')
 
 

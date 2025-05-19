@@ -66,7 +66,7 @@ class Cart(models.Model):
     def create_order(self, shipping_address, phone, email, comments=''):
         order = Order.objects.create(
             user=self.user,
-            total_price=self.get_total_price(),
+            total_price=self.total_price(),
             shipping_address=shipping_address,
             phone=phone,
             email=email,
