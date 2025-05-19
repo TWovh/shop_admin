@@ -84,3 +84,4 @@ class OrderListCreateView(generics.ListCreateAPIView):
             comments=serializer.validated_data.get('comments', '')
         )
         serializer.instance = order
+

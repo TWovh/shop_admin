@@ -58,7 +58,7 @@ class ProductAdmin(admin.ModelAdmin):
         return reverse('product_detail', args=[obj.id, obj.slug])
 
 
-@admin.register(Order, site=admin_site)
+"""@admin.register(Order, site=admin_site)
 class OrderAdmin(admin.ModelAdmin):
     list_display = ('id', 'user', 'status', 'total_price', 'created')
     list_filter = ('status', 'created')
@@ -76,7 +76,7 @@ class OrderAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
-
+"""
 
 @admin.register(OrderItem, site=admin_site)
 class OrderItemAdmin(admin.ModelAdmin):
