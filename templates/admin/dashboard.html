@@ -1,0 +1,60 @@
+{% extends "admin/index.html" %}
+
+{% block content %}
+<div class="dashboard">
+    <!-- Блоки статистики -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <h3>Общие продажи</h3>
+            <p>{{ total_sales }} ₽</p>
+        </div>
+        <div class="stat-card">
+            <h3>Товаров в каталоге</h3>
+            <p>{{ product_count }}</p>
+        </div>
+    </div>
+
+    <!-- Графики -->
+    <div class="charts">
+        <div class="chart-container">
+            <h3>Продажи по дням</h3>
+            <canvas id="salesChart"></canvas>
+        </div>
+        <div class="chart-container">
+            <h3>Топ товаров</h3>
+            <canvas id="productsChart"></canvas>
+        </div>
+    </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// График продаж
+new Chart(document.getElementById('salesChart'), {
+    type: 'line',
+    data: {
+        labels: {{ sales_labels|safe }},
+        datasets: [{
+            label: 'Продажи',
+            data: {{ sales_values|safe }},
+            borderColor: 'rgb(75, 192, 192)',
+            tension: 0.1
+        }]
+    }
+});
+
+// Круговой график топ товаров
+new Chart(document.getElementById('productsChart'), {
+    type: 'pie',
+    data: {
+        labels: {{ product_names|safe }},
+        datasets: [{
+            data: {{ product_sales|safe }},
+            backgroundColor: [
+                '#FF6384', '#36A2EB', '#FFCE56',
+                '#4BC0C0', '#9966FF'
+            ]
+        }]
+    }
+});
+</script>
+{% endblock %}

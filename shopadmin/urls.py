@@ -1,14 +1,15 @@
-from django.contrib import admin
 from django.urls import path, include
-from shop.views import home
 from django.conf import settings
 from django.conf.urls.static import static
+from shop.admin_dashboard import admin_site
+from shop.views import index
+
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    path('admin/', admin_site.urls),
     path('api/products/', include('shop.urls', namespace='products')),
     path('api/categories/', include('shop.urls', namespace='categories')),
-    path('', home, name='home'),
+    path('', index, name='index'),
 ]
 
 if settings.DEBUG:

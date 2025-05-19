@@ -6,8 +6,8 @@ app_name = 'shop'
 
 urlpatterns = [
     # URL для продуктов
-    path('', views.ProductListView.as_view(), name='product_list'),  # Список продуктов
-    path('<int:pk>/', views.ProductDetailView.as_view(), name='product_detail'),  # Детали продукта
+    path('', views.ProductListView.as_view(), name='product_list'),  # Список
+    path('<int:pk>/', views.ProductDetailView.as_view(), name='product_detail'),  # Детали
 
     # URL для категорий
     path('categories/', views.CategoryListView.as_view(), name='category_list'),  # Список категорий

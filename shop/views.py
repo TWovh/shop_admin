@@ -7,7 +7,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
-
+from django.shortcuts import render
 
 class ProductListView(generics.ListAPIView):
     queryset = Product.objects.filter(available=True)
@@ -63,3 +63,6 @@ def add_to_cart(request):
             item.save()
         return Response({'status': 'success'})
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+def index(request):
+    return render(request, 'index.html')

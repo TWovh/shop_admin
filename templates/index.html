@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Магазин API</title>
+    <meta charset="utf-8">
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .endpoint { background: #f5f5f5; padding: 15px; margin-bottom: 10px; border-radius: 5px; }
+        .method { font-weight: bold; color: #fff; padding: 3px 8px; border-radius: 3px; }
+        .get { background: #61affe; }
+        .post { background: #49cc90; }
+    </style>
+</head>
+<body>
+    <h1>Добро пожаловать в API магазина</h1>
+
+    <h2>Доступные endpoints:</h2>
+
+    <div class="endpoint">
+        <span class="method get">GET</span>
+        <strong>/api/products/</strong> - Список товаров
+    </div>
+
+    <div class="endpoint">
+        <span class="method get">GET</span>
+        <strong>/api/products/{id}/</strong> - Детали товара
+    </div>
+
+    <div class="endpoint">
+        <span class="method post">POST</span>
+        <strong>/api/cart/add/</strong> - Добавить в корзину (требуется auth)
+    </div>
+
+    <h2>Статус сервера</h2>
+    <p>API работает нормально. Время сервера: <span id="server-time"></span></p>
+
+    <script>
+        // Простой пример работы с API прямо со стартовой страницы
+        fetch('/api/products/')
+            .then(response => response.json())
+            .then(data => {
+                console.log('Получены товары:', data);
+            });
+
+        document.getElementById('server-time').textContent = new Date().toLocaleString();
+    </script>
+</body>
+</html>
