@@ -1,4 +1,4 @@
-from rest_framework import generics
+from rest_framework import generics, permissions
 from django.http import HttpResponse
 from .serializers import ProductSerializer, CategorySerializer
 from .cart_serializers import CartItemSerializer, AddToCartSerializer
@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import render
+from .serializers import OrderSerializer
 
 class ProductListView(generics.ListAPIView):
     queryset = Product.objects.filter(available=True)
@@ -66,3 +67,20 @@ def add_to_cart(request):
 
 def index(request):
     return render(request, 'index.html')
+
+class OrderListCreateView(generics.ListCreateAPIView):
+    serializer_class = OrderSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return self.request.user.orders.all()
+
+    def perform_create(self, serializer):
+        cart = self.request.user.cart
+        order = cart.create_order(
+            shipping_address=serializer.validated_data['shipping_address'],
+            phone=serializer.validated_data['phone'],
+            email=serializer.validated_data['email'],
+            comments=serializer.validated_data.get('comments', '')
+        )
+        serializer.instance = order

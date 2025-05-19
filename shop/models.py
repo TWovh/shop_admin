@@ -63,6 +63,27 @@ class Cart(models.Model):
     def total_price(self):
         return sum(item.total_price() for item in self.items.all())
 
+    def create_order(self, shipping_address, phone, email, comments=''):
+        order = Order.objects.create(
+            user=self.user,
+            total_price=self.get_total_price(),
+            shipping_address=shipping_address,
+            phone=phone,
+            email=email,
+            comments=comments
+        )
+
+        for cart_item in self.items.all():
+            OrderItem.objects.create(
+                order=order,
+                product=cart_item.product,
+                quantity=cart_item.quantity,
+                price=cart_item.product.price
+            )
+
+        self.items.all().delete()
+        return order
+
 
 class CartItem(models.Model):
     cart = models.ForeignKey(Cart, on_delete=models.CASCADE, related_name='items')
@@ -100,7 +121,7 @@ class Order(models.Model):
         return f"Заказ #{self.id} ({self.get_status_display()})"
 
 class OrderItem(models.Model):
-    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='order_items')
     product = models.ForeignKey('Product', on_delete=models.PROTECT)
     quantity = models.PositiveIntegerField(default=1)
     price = models.DecimalField(max_digits=10, decimal_places=2)

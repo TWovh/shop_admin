@@ -1,6 +1,6 @@
 from django.urls import path
 from . import views
-from .views import cart_detail, add_to_cart
+from .views import cart_detail, add_to_cart, OrderListCreateView
 
 app_name = 'shop'
 
@@ -14,4 +14,5 @@ urlpatterns = [
     path('categories/<int:pk>/', views.CategoryDetailView.as_view(), name='category_detail'),  # Детали категории
     path('cart/', cart_detail, name='cart'),
     path('cart/add/', add_to_cart, name='add_to_cart'),
+    path('api/orders/', OrderListCreateView.as_view(), name='order-list'),
 ]

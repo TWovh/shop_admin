@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Product, Category
+from .models import Product, Category, Order, OrderItem
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -18,12 +18,18 @@ class ProductSerializer(serializers.ModelSerializer):
                   'available', 'created', 'updated']
 
 
-class ProductSerializer(serializers.ModelSerializer):
+class OrderItemSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Product
-        fields = '__all__'
+        model = OrderItem
+        fields = ['product', 'quantity', 'price', 'total_price']
+        read_only_fields = ['price', 'total_price']
 
-class CategorySerializer(serializers.ModelSerializer):
+
+class OrderSerializer(serializers.ModelSerializer):
+    items = OrderItemSerializer(many=True, read_only=True)
+
     class Meta:
-        model = Category
-        fields = '__all__'
+        model = Order
+        fields = ['id', 'user', 'status', 'total_price', 'shipping_address',
+                  'phone', 'email', 'comments', 'created', 'items']
+        read_only_fields = ['user', 'status', 'total_price', 'created', 'items']
