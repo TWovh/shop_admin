@@ -1,13 +1,13 @@
 from .models import Product, Order, Category
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, reverse
 from django.shortcuts import render, redirect
 from django.db.models import Count, Sum, Avg
 from django.utils import timezone
 from datetime import timedelta
 from django.core.paginator import Paginator
 from django.http import Http404
-
+from django.utils.html import format_html
 
 
 class AdminDashboard(admin.AdminSite):
@@ -16,9 +16,23 @@ class AdminDashboard(admin.AdminSite):
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
-            path('statistics/', self.admin_view(self.statistics_view)),
+            path('statistics/', self.admin_view(self.statistics_view), name='statistics'),
+            path('api/products/', self.admin_view(self.redirect_to_api_products), name='api-products'),
+            path('api/products/<int:pk>/', self.admin_view(self.redirect_to_api_product_detail),
+                 name='api-product-detail'),
+            path('api/cart/add/', self.admin_view(self.redirect_to_api_cart_add), name='api-cart-add'),
+            path('statistics/', self.admin_view(self.statistics_view), name='statistics'),
         ]
         return custom_urls + urls
+
+    def redirect_to_api_products(self, request):
+        return redirect(reverse('api-products'))  # Проверить есть ли он юрлс
+
+    def redirect_to_api_product_detail(self, request, pk):
+        return redirect(reverse('api-product-detail', args=[pk]))
+
+    def redirect_to_api_cart_add(self, request):
+        return redirect(reverse('api-cart-add'))
 
     def get_dashboard_stats(self):          # Статистика продаж за последние 30 дней
 
@@ -33,10 +47,10 @@ class AdminDashboard(admin.AdminSite):
         top_products = (
             Product.objects
             .annotate(
-                total_ordered=Count('order_items'),
-                total_revenue=Sum('order_items__price')
+                order_count=Count('orderitem'),  # Количество заказов для товара
+                revenue=Sum('orderitem__price')  # Общая выручка по товару
             )
-            .order_by('-total_ordered')[:5]
+            .order_by('-order_count')[:5]
         )
 
         total_stats = Order.objects.aggregate(
@@ -54,17 +68,39 @@ class AdminDashboard(admin.AdminSite):
             'product_count': Product.objects.count()
         }
 
+
+
     def index(self, request, extra_context=None):
         extra_context = extra_context or {}
         stats = self.get_dashboard_stats()
 
+        extra_context['api_links'] = [
+            {
+                'name': 'Список товаров',
+                'url': reverse('myadmin:api-products'),
+                'method': 'GET'
+            },
+            {
+                'name': 'Детали товара',
+                'url': reverse('myadmin:api-product-detail', args=[0]).replace('0', '{id}'),
+                'method': 'GET'
+            },
+            {
+                'name': 'Добавить в корзину',
+                'url': reverse('myadmin:api-cart-add'),
+                'method': 'POST'
+            }
+        ]
+
         extra_context.update({
             'total_sales': stats['total_sales'],
             'product_count': stats['product_count'],
-            'sales_labels': [str(item['created__date']) for item in stats['sales_data']],
-            'sales_values': [float(item['total']) for item in stats['sales_data']],
+            'sales_labels': stats['sales_labels'],
+            'sales_values': stats['sales_values'],
             'product_names': [p.name for p in stats['top_products']],
-            'product_sales': [p.total_ordered for p in stats['top_products']]
+            'product_sales': [p.order_count for p in stats['top_products']],
+            # Используем order_count вместо total_ordered
+            'product_revenues': [float(p.revenue) for p in stats['top_products']]  # Добавим выручку по товарам
         })
 
         return super().index(request, extra_context)
@@ -90,7 +126,7 @@ class AdminDashboard(admin.AdminSite):
 
         categories_stats = (
             Category.objects
-            .annotate(total_sales=Sum('products__order_items__price'))
+            .annotate(total_sales=Sum('products__orderitem__price'))
             .exclude(total_sales=None)
             .order_by('-total_sales')
         )
@@ -123,3 +159,14 @@ class DashboardOrderAdmin(admin.ModelAdmin):
     list_filter = ('status', 'created')
 
 
+def redirect_to_api_cart_add(self, request):
+    if request.method == 'POST':
+        # Обработка POST запроса
+        return redirect(reverse('myadmin:api-cart-add'))
+
+    context = {
+        **self.each_context(request),
+        'title': 'Добавить в корзину',
+        'opts': self._registry[Order].model._meta,
+    }
+    return render(request, 'admin/cart_add_form.html', context)

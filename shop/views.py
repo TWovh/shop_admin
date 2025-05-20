@@ -9,6 +9,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import render
 from .serializers import OrderSerializer
+from rest_framework import viewsets
 
 class ProductListView(generics.ListAPIView):
     queryset = Product.objects.filter(available=True)
@@ -84,4 +85,14 @@ class OrderListCreateView(generics.ListCreateAPIView):
             comments=serializer.validated_data.get('comments', '')
         )
         serializer.instance = order
-
+    def handle_exception(self, exc):
+        if isinstance(exc, Cart.DoesNotExist):
+            return Response(
+                {'error': 'Cart is empty'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        return super().handle_exception(exc)
+class ProductViewSet(viewsets.ModelViewSet):
+    queryset = Product.objects.filter(available=True)
+    serializer_class = ProductSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
