@@ -1,0 +1,73 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static %}
+
+{% block extrahead %}
+    {{ block.super }}
+    {{ media }}
+    <link rel="stylesheet" href="{% static 'admin/css/forms.css' %}">
+    <style>
+        .form-row {
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .submit-row {
+            padding: 20px 0;
+        }
+        .field-box {
+            margin-bottom: 15px;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <h1>{% if form.instance.pk %}Редактирование{% else %}Добавление{% endif %} категории</h1>
+
+    <form method="post" id="category_form" novalidate>
+        {% csrf_token %}
+
+        <div class="form-row">
+            <div class="field-box">
+                {{ form.name.errors }}
+                <label for="{{ form.name.id_for_label }}">Название:</label>
+                {{ form.name }}
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="field-box">
+                {{ form.slug.errors }}
+                <label for="{{ form.slug.id_for_label }}">URL-адрес (slug):</label>
+                {{ form.slug }}
+                <p class="help">Уникальный идентификатор для URL (автозаполняется из названия)</p>
+            </div>
+        </div>
+
+        <div class="submit-row">
+            <input type="submit" value="Сохранить" class="default" name="_save">
+            <input type="submit" value="Сохранить и добавить еще" name="_addanother">
+            <input type="submit" value="Сохранить и продолжить редактирование" name="_continue">
+        </div>
+    </form>
+</div>
+
+<script src="{% static 'admin/js/vendor/jquery/jquery.js' %}"></script>
+<script>
+    // Автозаполнение slug из названия
+    document.getElementById('id_name').addEventListener('input', function() {
+        const slugField = document.getElementById('id_slug');
+        if (!slugField.value || slugField.dataset.changed !== 'true') {
+            slugField.value = this.value.toLowerCase()
+                .replace(/[^\w\s-]/g, '')  // Удаляем спецсимволы
+                .trim()                     // Убираем пробелы по краям
+                .replace(/\s+/g, '-')      // Заменяем пробелы на дефисы
+                .replace(/-+/g, '-');      // Убираем двойные дефисы
+        }
+    });
+
+    // Отмечаем, если slug был изменен вручную
+    document.getElementById('id_slug').addEventListener('change', function() {
+        this.dataset.changed = 'true';
+    });
+</script>
+{% endblock %}

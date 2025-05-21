@@ -67,10 +67,34 @@ class AdminDashboard(admin.AdminSite):
         return TemplateResponse(request, 'admin/add_product.html', self.each_context(request))
 
     def add_category(self, request):
+        from django import forms
+        from django.contrib import messages
+
+        class CategoryForm(forms.ModelForm):
+            class Meta:
+                model = Category
+                fields = ['name', 'slug']
+                widgets = {
+                    'name': forms.TextInput(attrs={'class': 'vTextField'}),
+                    'slug': forms.TextInput(attrs={'class': 'vTextField'}),
+                }
+
         if request.method == 'POST':
-            # Обработка формы добавления категории
-            return HttpResponseRedirect(reverse('myadmin:shop_category_changelist'))
-        return TemplateResponse(request, 'admin/add_category.html', self.each_context(request))
+            form = CategoryForm(request.POST)
+            if form.is_valid():
+                form.save()
+                messages.success(request, 'Категория успешно добавлена')
+                return HttpResponseRedirect(reverse('myadmin:shop_category_changelist'))
+
+        else:
+            form = CategoryForm()
+
+        context = {
+            'form': form,
+            'title': 'Добавить категорию',
+            **self.each_context(request),
+        }
+        return TemplateResponse(request, 'admin/add_category.html', context)
 
     def quick_orders(self, request):
         recent_orders = Order.objects.order_by('-created')[:10]

@@ -1,4 +1,3 @@
-from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from shop.admin_dashboard import admin_site
@@ -6,6 +5,7 @@ from shop.views import index
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from shop import views
+
 
 router = DefaultRouter()
 router.register(r'api/products', views.ProductViewSet)
