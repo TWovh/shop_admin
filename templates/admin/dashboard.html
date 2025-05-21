@@ -2,15 +2,6 @@
 
 {% block content %}
 <div class="dashboard">
-    <div class="quick-actions">
-        <h2>Быстрые действия</h2>
-        <div class="action-buttons">
-            {% for action in quick_actions %}
-                <a href="{{ action.url }}" class="button">{{ action.name }}</a>
-            {% endfor %}
-        </div>
-    </div>
-
     <div class="stats-grid">
         <div class="stat-card">
             <h3>Общие продажи</h3>
@@ -20,15 +11,10 @@
             <h3>Товаров в каталоге</h3>
             <p>{{ product_count }}</p>
         </div>
-    </div>
-
-    <div class="top-products">
-        <h2>Популярные товары</h2>
-        <ul>
-            {% for product in top_products %}
-                <li>{{ product.name }} ({{ product.order_count }} заказов)</li>
-            {% endfor %}
-        </ul>
+        <div class="stat-card">
+            <h3>Пользователей</h3>
+            <p>{{ user_count }}</p>
+        </div>
     </div>
 </div>
 {% endblock %}

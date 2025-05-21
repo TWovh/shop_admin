@@ -9,7 +9,8 @@ from django.core.paginator import Paginator
 from django.http import Http404
 from django.utils.html import format_html
 from django.template.response import TemplateResponse
-
+from django.contrib.auth.models import User, Group
+from django.contrib.auth.admin import UserAdmin, GroupAdmin
 
 
 class AdminDashboard(admin.AdminSite):
@@ -21,48 +22,25 @@ class AdminDashboard(admin.AdminSite):
         urls = super().get_urls()
         custom_urls = [
             path('statistics/', self.admin_view(self.statistics_view), name='statistics'),
-            path('add-product/', self.admin_view(self.add_product), name='add_product'),
-            path('add-category/', self.admin_view(self.add_category), name='add_category'),
-            path('quick-orders/', self.admin_view(self.quick_orders), name='quick_orders'),
-            path('api/products/', self.admin_view(self.redirect_to_api_products), name='api-products'),
-            path('api/products/<int:pk>/', self.admin_view(self.redirect_to_api_product_detail),
-                 name='api-product-detail'),
             path('api/cart/add/', self.admin_view(self.redirect_to_api_cart_add), name='api-cart-add'),
 
         ]
         return custom_urls + urls
 
-    def get_app_list(self, request):
-        app_list = super().get_app_list(request)
-        app_list.append({
-            'name': 'Быстрые действия',
-            'app_label': 'quick_actions',
-            'models': [
-                {
-                    'name': 'Добавить товар',
-                    'object_name': 'add_product',
-                    'admin_url': reverse('myadmin:add_product'),
+    def get_app_list(self, request, app_label=None):
+        app_list = super().get_app_list(request, app_label)
+        for app in app_list:
+            if app['app_label'] == 'auth':
+                app['models'].append({
+                    'name': 'Статистика',
+                    'object_name': 'statistics',
+                    'admin_url': reverse('myadmin:statistics'),
                     'view_only': True,
-                },
-                {
-                    'name': 'Добавить категорию',
-                    'object_name': 'add_category',
-                    'admin_url': reverse('myadmin:add_category'),
-                    'view_only': True,
-                },
-                {
-                    'name': 'Быстрые заказы',
-                    'object_name': 'quick_orders',
-                    'admin_url': reverse('myadmin:quick_orders'),
-                    'view_only': True,
-                },
-            ],
-        })
+                })
         return app_list
 
     def add_product(self, request):
         if request.method == 'POST':
-            # Обработка формы добавления товара
             return HttpResponseRedirect(reverse('myadmin:shop_product_changelist'))
         return TemplateResponse(request, 'admin/add_product.html', self.each_context(request))
 
@@ -112,7 +90,7 @@ class AdminDashboard(admin.AdminSite):
     def redirect_to_api_cart_add(self, request):
         return redirect(reverse('api-cart-add'))
 
-    def get_dashboard_stats(self):          # Статистика продаж за последние 30 дней
+    def get_dashboard_stats(self):
 
         sales_data = (
             Order.objects
@@ -135,6 +113,11 @@ class AdminDashboard(admin.AdminSite):
             total_sales=Sum('total_price'),
             avg_order=Avg('total_price')
         )
+        from django.contrib.auth.models import User
+        user_stats = {
+            'user_count': User.objects.count(),
+            'active_users': User.objects.filter(is_active=True).count()
+        }
 
         return {
             'sales_data': list(sales_data),
@@ -145,6 +128,7 @@ class AdminDashboard(admin.AdminSite):
             'avg_order': total_stats['avg_order'] or 0,
             'product_count': Product.objects.count()
         }
+
 
 
 
@@ -171,11 +155,6 @@ class AdminDashboard(admin.AdminSite):
         ]
 
         extra_context.update({
-            'quick_actions': [
-                {'name': 'Добавить товар', 'url': reverse('myadmin:add_product')},
-                {'name': 'Добавить категорию', 'url': reverse('myadmin:add_category')},
-                {'name': 'Статистика', 'url': reverse('myadmin:statistics')},
-            ],
             'total_sales': stats['total_sales'],
             'product_count': stats['product_count'],
             'top_products': stats['top_products'],
@@ -229,7 +208,7 @@ admin_site = AdminDashboard(name='myadmin')
 # Регистрируем модели с кастомизацией для дашборда
 @admin.register(Product, site=admin_site)
 class DashboardProductAdmin(admin.ModelAdmin):
-    list_display = ('name', 'price', 'category', 'available', 'quick_actions')
+    list_display = ('name', 'price', 'category', 'available')
     list_filter = ('category', 'available')
     search_fields = ('name', 'description')
     prepopulated_fields = {'slug': ('name',)}
@@ -287,3 +266,9 @@ class DashboardCategoryAdmin(admin.ModelAdmin):
         )
 
     quick_edit.short_description = ''
+
+@admin.register(User, site=admin_site)
+class CustomUserAdmin(UserAdmin):
+    list_display = ('username', 'email', 'first_name', 'last_name', 'is_staff')
+    list_filter = ('is_staff', 'is_superuser', 'is_active')
+    search_fields = ('username', 'first_name', 'last_name', 'email')
