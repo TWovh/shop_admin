@@ -1,29 +1,83 @@
-from .models import Product, Order, Category
+from .models import Product, Order, Category, OrderItem
 from django.contrib import admin
 from django.urls import path, reverse
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, HttpResponseRedirect
 from django.db.models import Count, Sum, Avg
 from django.utils import timezone
 from datetime import timedelta
 from django.core.paginator import Paginator
 from django.http import Http404
 from django.utils.html import format_html
+from django.template.response import TemplateResponse
+
 
 
 class AdminDashboard(admin.AdminSite):
     index_template = 'admin/dashboard.html'
+    site_header = 'Панель управления магазином'
+    site_title = 'Администрирование магазина'
 
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
             path('statistics/', self.admin_view(self.statistics_view), name='statistics'),
+            path('add-product/', self.admin_view(self.add_product), name='add_product'),
+            path('add-category/', self.admin_view(self.add_category), name='add_category'),
+            path('quick-orders/', self.admin_view(self.quick_orders), name='quick_orders'),
             path('api/products/', self.admin_view(self.redirect_to_api_products), name='api-products'),
             path('api/products/<int:pk>/', self.admin_view(self.redirect_to_api_product_detail),
                  name='api-product-detail'),
             path('api/cart/add/', self.admin_view(self.redirect_to_api_cart_add), name='api-cart-add'),
-            path('statistics/', self.admin_view(self.statistics_view), name='statistics'),
+
         ]
         return custom_urls + urls
+
+    def get_app_list(self, request):
+        app_list = super().get_app_list(request)
+        app_list.append({
+            'name': 'Быстрые действия',
+            'app_label': 'quick_actions',
+            'models': [
+                {
+                    'name': 'Добавить товар',
+                    'object_name': 'add_product',
+                    'admin_url': reverse('myadmin:add_product'),
+                    'view_only': True,
+                },
+                {
+                    'name': 'Добавить категорию',
+                    'object_name': 'add_category',
+                    'admin_url': reverse('myadmin:add_category'),
+                    'view_only': True,
+                },
+                {
+                    'name': 'Быстрые заказы',
+                    'object_name': 'quick_orders',
+                    'admin_url': reverse('myadmin:quick_orders'),
+                    'view_only': True,
+                },
+            ],
+        })
+        return app_list
+
+    def add_product(self, request):
+        if request.method == 'POST':
+            # Обработка формы добавления товара
+            return HttpResponseRedirect(reverse('myadmin:shop_product_changelist'))
+        return TemplateResponse(request, 'admin/add_product.html', self.each_context(request))
+
+    def add_category(self, request):
+        if request.method == 'POST':
+            # Обработка формы добавления категории
+            return HttpResponseRedirect(reverse('myadmin:shop_category_changelist'))
+        return TemplateResponse(request, 'admin/add_category.html', self.each_context(request))
+
+    def quick_orders(self, request):
+        recent_orders = Order.objects.order_by('-created')[:10]
+        return TemplateResponse(request, 'admin/quick_orders.html', {
+            'recent_orders': recent_orders,
+            **self.each_context(request)
+        })
 
     def redirect_to_api_products(self, request):
         return redirect(reverse('api-products'))  # Проверить есть ли он юрлс
@@ -93,16 +147,19 @@ class AdminDashboard(admin.AdminSite):
         ]
 
         extra_context.update({
+            'quick_actions': [
+                {'name': 'Добавить товар', 'url': reverse('myadmin:add_product')},
+                {'name': 'Добавить категорию', 'url': reverse('myadmin:add_category')},
+                {'name': 'Статистика', 'url': reverse('myadmin:statistics')},
+            ],
             'total_sales': stats['total_sales'],
             'product_count': stats['product_count'],
-            'sales_labels': stats['sales_labels'],
-            'sales_values': stats['sales_values'],
-            'product_names': [p.name for p in stats['top_products']],
-            'product_sales': [p.order_count for p in stats['top_products']],
-            # Используем order_count вместо total_ordered
-            'product_revenues': [float(p.revenue) for p in stats['top_products']]  # Добавим выручку по товарам
+            'top_products': stats['top_products'],
+            'sales_chart': {
+                'labels': stats['sales_labels'],
+                'data': stats['sales_values']
+            }
         })
-
         return super().index(request, extra_context)
 
     def statistics_view(self, request):
@@ -135,12 +192,11 @@ class AdminDashboard(admin.AdminSite):
             'total_sales': orders.aggregate(total=Sum('total_price'))['total'] or 0,
             'orders_count': orders.count(),
             'recent_orders': orders.order_by('-created')[:10],
-            'categories_labels': [cat.name for cat in categories_stats],
-            'categories_values': [float(cat.total_sales) for cat in categories_stats],
+            'categories_stats': categories_stats,
             **self.each_context(request),
             'title': 'Статистика продаж',
         }
-        return render(request, 'admin/statistics.html', context)
+        return TemplateResponse(request, 'admin/statistics.html', context)
 
 # Замена админки через эту команду
 admin_site = AdminDashboard(name='myadmin')
@@ -149,19 +205,37 @@ admin_site = AdminDashboard(name='myadmin')
 # Регистрируем модели с кастомизацией для дашборда
 @admin.register(Product, site=admin_site)
 class DashboardProductAdmin(admin.ModelAdmin):
-    list_display = ('name', 'price', 'available')
+    list_display = ('name', 'price', 'category', 'available', 'quick_actions')
+    list_filter = ('category', 'available')
+    search_fields = ('name', 'description')
+    prepopulated_fields = {'slug': ('name',)}
 
+    def quick_actions(self, obj):
+        return format_html(
+            '<a class="button" href="{}">Edit</a> '
+            '<a class="button" href="{}" style="background:#4CAF50">Copy</a>',
+            reverse('myadmin:shop_product_change', args=[obj.id]),
+            reverse('myadmin:shop_product_copy', args=[obj.id]),
+        )
 
+    quick_actions.short_description = 'Действия'
 
 @admin.register(Order, site=admin_site)
 class DashboardOrderAdmin(admin.ModelAdmin):
-    list_display = ('id', 'user', 'total_price', 'status', 'created')
+    list_display = ('id', 'user', 'total_price', 'status', 'created', 'quick_actions')
     list_filter = ('status', 'created')
+    search_fields = ('user__username', 'id')
+
+    def quick_actions(self, obj):
+        return format_html(
+            '<a class="button" href="{}">Просмотр</a>',
+            reverse('myadmin:shop_order_change', args=[obj.id]),
+        )
+    quick_actions.short_description = ''
 
 
 def redirect_to_api_cart_add(self, request):
     if request.method == 'POST':
-        # Обработка POST запроса
         return redirect(reverse('myadmin:api-cart-add'))
 
     context = {
@@ -170,3 +244,22 @@ def redirect_to_api_cart_add(self, request):
         'opts': self._registry[Order].model._meta,
     }
     return render(request, 'admin/cart_add_form.html', context)
+
+
+@admin.register(Category, site=admin_site)
+class DashboardCategoryAdmin(admin.ModelAdmin):
+    list_display = ('name', 'slug', 'product_count', 'quick_edit')
+    prepopulated_fields = {'slug': ('name',)}
+
+    def product_count(self, obj):
+        return obj.products.count()
+
+    product_count.short_description = 'Товаров'
+
+    def quick_edit(self, obj):
+        return format_html(
+            '<a class="button" href="{}">Быстрое редактирование</a>',
+            reverse('myadmin:shop_category_change', args=[obj.id]),
+        )
+
+    quick_edit.short_description = ''

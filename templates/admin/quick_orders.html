@@ -1,0 +1,25 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<h1>Последние заказы</h1>
+<table>
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Пользователь</th>
+            <th>Сумма</th>
+            <th>Статус</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for order in recent_orders %}
+        <tr>
+            <td><a href="{{ order.get_admin_url }}">{{ order.id }}</a></td>
+            <td>{{ order.user }}</td>
+            <td>{{ order.total_price }} ₽</td>
+            <td>{{ order.get_status_display }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

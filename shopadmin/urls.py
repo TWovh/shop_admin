@@ -12,7 +12,7 @@ router.register(r'api/products', views.ProductViewSet)
 
 urlpatterns = [
     path('admin/', admin_site.urls),
-    path('', include(router.urls)),
+    path('api/', include(router.urls)),
     path('api/cart/', views.cart_detail, name='cart-detail'),# API для корзины
     path('api/cart/add/', views.add_to_cart, name='add-to-cart'),
     path('api/orders/', views.OrderListCreateView.as_view(), name='order-list'), #API заказов
