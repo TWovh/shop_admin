@@ -9,8 +9,29 @@ load_dotenv()
 SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = True
 
+CORS_ALLOWED_ORIGINS = ['домен']
+CSRF_TRUSTED_ORIGINS = ['домен']
 ALLOWED_HOSTS = []
+AUTH_USER_MODEL = 'shop.User'
 
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+SECURE_BROWSER_XSS_FILTER = True
+
+PASSWORD_HASHERS = [
+    'django.contrib.auth.hashers.Argon2PasswordHasher',
+]
+
+LOGGING = {
+    'version': 1,
+    'handlers': {
+        'file': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': 'debug.log',
+        },
+    },
+}
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -73,7 +94,6 @@ REST_FRAMEWORK = {
     ]
 }
 
-
 AUTH_PASSWORD_VALIDATORS = [
     {
         "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
@@ -99,6 +119,7 @@ TIME_ZONE = "UTC"
 USE_I18N = True
 
 USE_TZ = True
+
 
 
 

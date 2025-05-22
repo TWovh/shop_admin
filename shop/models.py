@@ -1,14 +1,74 @@
-from django.db import models
+from django.db import models, transaction
 from django.urls import reverse
 from django.db.models import Index, Sum
 from django.utils.safestring import mark_safe
-from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
-from django.db import transaction
+from django.utils import timezone
+from django.contrib.auth.models import AbstractUser, BaseUserManager
+from django.utils.translation import gettext_lazy as _
+from django.contrib.auth.password_validation import validate_password
 
 
-User = get_user_model()
+class UserManager(BaseUserManager):
+    def create_user(self, email, password=None, **extra_fields):
+        if not email:
+            raise ValueError('The Email must be set')
+        email = self.normalize_email(email)
+        user = self.model(email=email, **extra_fields)
+        user.set_password(password)
+        user.save()
+        return user
+
+    def create_superuser(self, email, password, **extra_fields):
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+        extra_fields.setdefault('is_active', True)
+        extra_fields.setdefault('role', 'ADMIN')
+
+        if extra_fields.get('is_staff') is not True:
+            raise ValueError('Superuser must have is_staff=True.')
+        if extra_fields.get('is_superuser') is not True:
+            raise ValueError('Superuser must have is_superuser=True.')
+        return self.create_user(email, password, **extra_fields)
+
+class User(AbstractUser):
+    ROLES = (
+        ('ADMIN', 'Администратор'),
+        ('STAFF', 'Менеджер'),
+        ('USER', 'Пользователь'),
+    )
+    role: str = models.CharField(
+        max_length=5,
+        choices=ROLES,
+        default='USER',
+        verbose_name='Роль'
+    )
+
+    username = None
+    email = models.EmailField(_('email address'), unique=True)
+    phone = models.CharField(max_length=20, blank=True)
+
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = []
+
+    objects = UserManager()
+
+    class Meta:
+        verbose_name = 'User'
+        verbose_name_plural = 'Users'
+        permissions = [
+            ('full_access', 'Full admin access'),
+            ('staff_access', 'Staff access'),
+        ]
+
+    def __str__(self):
+        return self.email
+
+    def save(self, *args, **kwargs):
+        if self.password and not self.password.startswith(('pbkdf2_sha256$', 'bcrypt$')):
+            validate_password(self.password)
+        super().save(*args, **kwargs)
 
 class Category(models.Model):
     name = models.CharField(max_length=200, db_index=True)
@@ -46,6 +106,10 @@ class Product(models.Model):
     updated = models.DateTimeField(auto_now=True)
 
     class Meta:
+        permissions = [
+            ('view_dashboard', 'Can view admin dashboard'),
+            ('manage_cart', 'Can manage carts'),
+        ]
         ordering = ('name',)
         indexes = [
             Index(fields=['id', 'slug']),
@@ -80,7 +144,7 @@ class Cart(models.Model):
         ordering = ['-updated_at']
 
     def __str__(self):
-        return f"Корзина {self.user.username} (ID: {self.id})"
+        return f"Корзина {self.user.username if self.user else 'анонима'}"
 
     @property
     def total_price(self):
@@ -149,7 +213,7 @@ class CartItem(models.Model):
         verbose_name='Количество'
     )
     added_at = models.DateTimeField(
-        auto_now_add=True,
+        default=timezone.now,
         verbose_name='Дата добавления'
     )
 
@@ -164,11 +228,9 @@ class CartItem(models.Model):
 
     @property
     def total_price(self):
-        """Общая стоимость позиции"""
         return self.product.price * self.quantity
 
     def clean(self):
-        """Валидация перед сохранением"""
         if self.product.available is False:
             raise ValidationError("Нельзя добавить недоступный товар в корзину")
 
@@ -181,6 +243,12 @@ class CartItem(models.Model):
         super().save(*args, **kwargs)
 
 class Order(models.Model):
+    PROTECTED_FIELDS = ['total_price', 'user']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._meta.get_field('total_price').editable = False
+
     STATUS_CHOICES = [
         ('new', 'Новый'),
         ('processing', 'В обработке'),
@@ -200,6 +268,10 @@ class Order(models.Model):
     comments = models.TextField(blank=True)
 
     class Meta:
+        indexes = [
+            models.Index(fields=['user', 'status']),
+            models.Index(fields=['created']),
+        ]
         ordering = ('-created',)
         verbose_name = 'Заказ'
         verbose_name_plural = 'Заказы'
@@ -219,3 +291,8 @@ class OrderItem(models.Model):
     @property
     def total_price(self):
         return self.price * self.quantity
+
+
+
+
+

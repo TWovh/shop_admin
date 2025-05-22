@@ -1,4 +1,4 @@
-from .models import Product, Order, Category, OrderItem
+from .models import Product, Category, Order, Cart, CartItem, User
 from django.contrib import admin
 from django.urls import path, reverse
 from django.shortcuts import render, redirect, HttpResponseRedirect
@@ -9,8 +9,14 @@ from django.core.paginator import Paginator
 from django.http import Http404
 from django.utils.html import format_html
 from django.template.response import TemplateResponse
-from django.contrib.auth.models import User, Group
+from django.contrib.auth.models import User, Group, AbstractUser
 from django.contrib.auth.admin import UserAdmin, GroupAdmin
+from django.contrib.auth.decorators import permission_required, user_passes_test
+from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.admin.forms import AdminAuthenticationForm
+from django.core.cache import cache
+from django.core.exceptions import ValidationError
+from django.contrib.admin.models import LogEntry
 
 
 class AdminDashboard(admin.AdminSite):
@@ -27,17 +33,53 @@ class AdminDashboard(admin.AdminSite):
         ]
         return custom_urls + urls
 
+    def admin_view(self, view, cacheable=False):
+        # Обертка для проверки прав доступа
+        inner_view = super().admin_view(view, cacheable)
+
+        @staff_member_required
+        @user_passes_test(lambda u: u.has_perm('shop.view_dashboard'))
+        def wrapped_view(request, *args, **kwargs):
+            return inner_view(request, *args, **kwargs)
+
+        return wrapped_view
+
     def get_app_list(self, request, app_label=None):
         app_list = super().get_app_list(request, app_label)
-        for app in app_list:
-            if app['app_label'] == 'auth':
-                app['models'].append({
-                    'name': 'Статистика',
-                    'object_name': 'statistics',
-                    'admin_url': reverse('myadmin:statistics'),
-                    'view_only': True,
-                })
+
+        # Проверка прав перед добавлением разделов
+        if request.user.has_perm('shop.view_dashboard'):
+            for app in app_list:
+                if app['app_label'] == 'auth':
+                    app['models'].append({
+                        'name': 'Статистика',
+                        'object_name': 'statistics',
+                        'admin_url': reverse('myadmin:statistics'),
+                        'view_only': True,
+                    })
+                    break
+
+        if request.user.has_perm('shop.manage_cart'):
+            app_list.append({
+                'name': 'Корзины',
+                'app_label': 'carts',
+                'models': [
+                    {
+                        'name': 'Корзины',
+                        'object_name': 'cart',
+                        'admin_url': reverse('admin:shop_cart_changelist'),
+                    },
+                    {
+                        'name': 'Элементы корзины',
+                        'object_name': 'cartitem',
+                        'admin_url': reverse('admin:shop_cartitem_changelist'),
+                    }
+                ]
+            })
+
         return app_list
+
+
 
     def add_product(self, request):
         if request.method == 'POST':
@@ -74,12 +116,6 @@ class AdminDashboard(admin.AdminSite):
         }
         return TemplateResponse(request, 'admin/add_category.html', context)
 
-    def quick_orders(self, request):
-        recent_orders = Order.objects.order_by('-created')[:10]
-        return TemplateResponse(request, 'admin/quick_orders.html', {
-            'recent_orders': recent_orders,
-            **self.each_context(request)
-        })
 
     def redirect_to_api_products(self, request):
         return redirect(reverse('api-products'))  # Проверить есть ли он юрлс
@@ -129,32 +165,35 @@ class AdminDashboard(admin.AdminSite):
             'product_count': Product.objects.count()
         }
 
-
-
-
+    @permission_required('shop.view_dashboard', raise_exception=True)
     def index(self, request, extra_context=None):
         extra_context = extra_context or {}
         stats = self.get_dashboard_stats()
 
-        extra_context['api_links'] = [
-            {
-                'name': 'Список товаров',
-                'url': reverse('myadmin:api-products'),
-                'method': 'GET'
-            },
-            {
-                'name': 'Детали товара',
-                'url': reverse('myadmin:api-product-detail', args=[0]).replace('0', '{id}'),
-                'method': 'GET'
-            },
-            {
-                'name': 'Добавить в корзину',
-                'url': reverse('myadmin:api-cart-add'),
-                'method': 'POST'
-            }
-        ]
-
         extra_context.update({
+            'api_links': [
+                {
+                    'name': 'Список товаров',
+                    'url': reverse('product-list'),
+                    'method': 'GET'
+                },
+                {
+                    'name': 'Список категорий',
+                    'url': reverse('category-list'),
+                    'method': 'GET'
+                },
+
+                {
+                    'name': 'Детали товара',
+                    'url': '/api/products/1/',  # Или используйте reverse с параметрами
+                    'method': 'GET'
+                },
+                {
+                    'name': 'Добавить в корзину',
+                    'url': reverse('add-to-cart'),
+                    'method': 'POST'
+                }
+            ],
             'total_sales': stats['total_sales'],
             'product_count': stats['product_count'],
             'top_products': stats['top_products'],
@@ -205,36 +244,57 @@ class AdminDashboard(admin.AdminSite):
 admin_site = AdminDashboard(name='myadmin')
 
 
-# Регистрируем модели с кастомизацией для дашборда
+class RoleBasedAdmin(admin.ModelAdmin):
+    roles_with_access = ['ADMIN', 'STAFF']
+
+    def has_module_permission(self, request):
+        return (
+                request.user.is_authenticated and
+                request.user.role in self.roles_with_access
+        )
+
+    def has_add_permission(self, request):
+        return (
+                request.user.is_authenticated and
+                request.user.role in self.roles_with_access
+        )
+
+    def has_change_permission(self, request, obj=None):
+        return (
+                request.user.is_authenticated and
+                request.user.role in self.roles_with_access
+        )
+
+    def has_delete_permission(self, request, obj=None):
+        return (
+                request.user.is_authenticated and
+                request.user.role == 'ADMIN'
+        )
+
 @admin.register(Product, site=admin_site)
-class DashboardProductAdmin(admin.ModelAdmin):
+class DashboardProductAdmin(RoleBasedAdmin):
     list_display = ('name', 'price', 'category', 'available')
     list_filter = ('category', 'available')
     search_fields = ('name', 'description')
     prepopulated_fields = {'slug': ('name',)}
 
-    def quick_actions(self, obj):
-        return format_html(
-            '<a class="button" href="{}">Edit</a> '
-            '<a class="button" href="{}" style="background:#4CAF50">Copy</a>',
-            reverse('myadmin:shop_product_change', args=[obj.id]),
-            reverse('myadmin:shop_product_copy', args=[obj.id]),
-        )
+    def has_add_permission(self, request):
+        if not request.user.is_authenticated:
+            return False
+        return request.user.role in {'ADMIN', 'STAFF'}
 
-    quick_actions.short_description = 'Действия'
+    def has_change_permission(self, request, obj=None):
+        return request.user.role in ['ADMIN', 'STAFF']
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.role == 'ADMIN'
 
 @admin.register(Order, site=admin_site)
 class DashboardOrderAdmin(admin.ModelAdmin):
-    list_display = ('id', 'user', 'total_price', 'status', 'created', 'quick_actions')
+    list_display = ('id', 'user', 'total_price', 'status', 'created')
     list_filter = ('status', 'created')
     search_fields = ('user__username', 'id')
 
-    def quick_actions(self, obj):
-        return format_html(
-            '<a class="button" href="{}">Просмотр</a>',
-            reverse('myadmin:shop_order_change', args=[obj.id]),
-        )
-    quick_actions.short_description = ''
 
 
 def redirect_to_api_cart_add(self, request):
@@ -251,7 +311,7 @@ def redirect_to_api_cart_add(self, request):
 
 @admin.register(Category, site=admin_site)
 class DashboardCategoryAdmin(admin.ModelAdmin):
-    list_display = ('name', 'slug', 'product_count', 'quick_edit')
+    list_display = ('name', 'slug', 'product_count')
     prepopulated_fields = {'slug': ('name',)}
 
     def product_count(self, obj):
@@ -259,16 +319,103 @@ class DashboardCategoryAdmin(admin.ModelAdmin):
 
     product_count.short_description = 'Товаров'
 
-    def quick_edit(self, obj):
-        return format_html(
-            '<a class="button" href="{}">Быстрое редактирование</a>',
-            reverse('myadmin:shop_category_change', args=[obj.id]),
-        )
-
-    quick_edit.short_description = ''
-
+# Администратор (полные права)
 @admin.register(User, site=admin_site)
 class CustomUserAdmin(UserAdmin):
-    list_display = ('username', 'email', 'first_name', 'last_name', 'is_staff')
-    list_filter = ('is_staff', 'is_superuser', 'is_active')
-    search_fields = ('username', 'first_name', 'last_name', 'email')
+    list_display = ('email', 'get_role_display', 'is_staff', 'is_active')  # Используем get_role_display
+    list_filter = ('role', 'is_staff', 'is_active')
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        form.base_fields['role'].role = 'role'  # Явное указание для IDE
+        return form
+
+    fieldsets = (
+        (None, {'fields': ('email', 'password')}),
+        ('Персональная информация', {'fields': ('first_name', 'last_name', 'phone')}),
+        ('Права доступа', {
+            'fields': ('role', 'is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions'),
+        }),
+        ('Даты', {'fields': ('last_login', 'date_joined')}),
+    )
+
+    add_fieldsets = (
+        (None, {
+            'classes': ('wide',),
+            'fields': ('email', 'password1', 'password2', 'role'),
+        }),
+    )
+
+    ordering = ('email',)
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        form.base_fields['role'].required = True  # Пример дополнительной настройки
+        return form
+
+
+
+# Сотрудник (ограниченные права)
+class StaffAdmin(admin.ModelAdmin):
+    def has_module_permission(self, request):
+        user = request.user
+        if hasattr(user, 'role'):
+            return user.role == 'STAFF'
+        return False
+
+    def has_add_permission(self, request):
+        user = request.user
+        if hasattr(user, 'role'):
+            return user.role == 'STAFF'
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        user = request.user
+        if hasattr(user, 'role'):
+            return user.role == 'STAFF'
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False  # Сотрудники не могут удалять
+
+# Обычные пользователи не видят админку
+
+
+@admin.register(Cart, site=admin_site)
+class CartAdmin(admin.ModelAdmin):
+    list_display = ('user', 'created_at', 'updated_at', 'items_count', 'total_price')
+    list_filter = ('created_at', 'updated_at')
+    search_fields = ('user__username',)
+    readonly_fields = ('total_price', 'items_count')
+    raw_id_fields = ('user',)
+
+    def items_count(self, obj):
+        return obj.items.count()
+    items_count.short_description = 'Количество товаров'
+
+    def total_price(self, obj):
+        return sum(item.total_price for item in obj.items.all())
+    total_price.short_description = 'Общая сумма'
+
+@admin.register(CartItem, site=admin_site)
+class CartItemAdmin(admin.ModelAdmin):
+    list_display = ('id', 'cart', 'product', 'quantity', 'total_price')
+    list_filter = ('cart__user',)
+    search_fields = ('product__name', 'cart__user__username')
+    raw_id_fields = ('cart', 'product')
+
+    def total_price(self, obj):
+        return obj.total_price
+    total_price.short_description = 'Сумма'
+
+
+class CustomAdminAuthForm(AdminAuthenticationForm):
+    def confirm_login_allowed(self, user):
+        super().confirm_login_allowed(user)
+        if user.role not in ['ADMIN', 'STAFF']:
+            raise ValidationError("Доступ запрещен.")
+
+@admin.register(LogEntry, site=admin_site)
+class LogEntryAdmin(admin.ModelAdmin):
+    list_display = ['action_time', 'user', 'content_type', 'change_message']
+    readonly_fields = ['action_time', 'user', 'content_type']

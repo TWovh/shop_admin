@@ -7,9 +7,12 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
-from django.shortcuts import render
 from .serializers import OrderSerializer
 from rest_framework import viewsets
+from django.contrib.auth import login
+from django.shortcuts import render, redirect
+from .forms import UserRegistrationForm
+from rest_framework.throttling import UserRateThrottle
 
 class ProductListView(generics.ListAPIView):
     queryset = Product.objects.filter(available=True)
@@ -38,16 +41,20 @@ def home(request):
         </ul>
     """)
 
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def cart_detail(request):
-    cart, created = Cart.objects.get_or_create(user=request.user)
+    try:
+        cart = Cart.objects.get(user=request.user)
+    except Cart.DoesNotExist:
+        cart = Cart.objects.create(user=request.user)
+
     serializer = CartItemSerializer(cart.items.all(), many=True)
     return Response({
         'items': serializer.data,
-        'total_price': cart.total_price()
+        'total_price': cart.total_price
     })
-
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def add_to_cart(request):
@@ -70,8 +77,8 @@ def index(request):
     return render(request, 'index.html')
 
 class OrderListCreateView(generics.ListCreateAPIView):
+    permission_classes = [permissions.IsAuthenticated, CustomPermission]
     serializer_class = OrderSerializer
-    permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
         return self.request.user.orders.all()
@@ -96,3 +103,26 @@ class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.filter(available=True)
     serializer_class = ProductSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+class CategoryViewSet(viewsets.ModelViewSet):
+    queryset = Category.objects.all()
+    serializer_class = CategorySerializer
+    lookup_field = 'slug'
+
+
+
+def register(request):
+    if request.method == 'POST':
+        form = UserRegistrationForm(request.POST)
+        if form.is_valid():
+            user = form.save(commit=False)
+            user.role = 'USER'  # Автоматически назначаем роль
+            user.save()
+            login(request, user)
+            return redirect('home')
+    else:
+        form = UserRegistrationForm()
+    return render(request, 'register.html', {'form': form})
+
+class CartThrottle(UserRateThrottle):
+    scope = 'cart'

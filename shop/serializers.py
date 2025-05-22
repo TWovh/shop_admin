@@ -9,6 +9,12 @@ class CategorySerializer(serializers.ModelSerializer):
 
 
 class ProductSerializer(serializers.ModelSerializer):
+    def validate_price(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Цена должна быть положительной.")
+        return value
+
+
     category = serializers.StringRelatedField()
 
     class Meta:
@@ -33,3 +39,7 @@ class OrderSerializer(serializers.ModelSerializer):
         fields = ['id', 'user', 'status', 'total_price', 'shipping_address',
                   'phone', 'email', 'comments', 'created', 'items']
         read_only_fields = ['user', 'status', 'total_price', 'created', 'items']
+
+
+class AddToCartSerializer(serializers.Serializer):
+    quantity = serializers.IntegerField(min_value=1, max_value=100)

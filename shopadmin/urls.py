@@ -8,16 +8,17 @@ from shop import views
 
 
 router = DefaultRouter()
-router.register(r'api/products', views.ProductViewSet)
+router.register(r'products', views.ProductViewSet, basename='product')
+router.register(r'categories', views.CategoryViewSet, basename='category')
 
 urlpatterns = [
     path('admin/', admin_site.urls),
-    path('api/', include(router.urls)),
-    path('api/cart/', views.cart_detail, name='cart-detail'),# API для корзины
-    path('api/cart/add/', views.add_to_cart, name='add-to-cart'),
-    path('api/orders/', views.OrderListCreateView.as_view(), name='order-list'), #API заказов
-    path('api/products/', include('shop.urls', namespace='products')),
-    path('api/categories/', include('shop.urls', namespace='categories')),
+    path('api/', include([
+        path('', include(router.urls)),
+        path('cart/', views.cart_detail, name='cart-detail'),
+        path('cart/add/', views.add_to_cart, name='add-to-cart'),
+        path('orders/', views.OrderListCreateView.as_view(), name='order-list'),
+    ])),
     path('', index, name='index'),
 ]
 
