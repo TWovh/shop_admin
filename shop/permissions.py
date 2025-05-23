@@ -18,8 +18,16 @@ class CustomPermission(permissions.BasePermission):
         return request.user.role in self.allowed_roles
 
     def has_object_permission(self, request, view, obj):
-        # Дополнительная проверка на уровне объекта
-        return self.has_permission(request, view)
+        if request.user.role == 'ADMIN':
+            return True
+
+        if hasattr(obj, 'user'):
+            return obj.user == request.user
+
+        if hasattr(obj, 'cart') and hasattr(obj.cart, 'user'):
+            return obj.cart.user == request.user
+
+        return False
 
 
 class IsAdmin(CustomPermission):

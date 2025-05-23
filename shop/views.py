@@ -14,10 +14,21 @@ from django.shortcuts import render, redirect
 from .forms import UserRegistrationForm
 from rest_framework.throttling import UserRateThrottle
 from .permissions import IsAdmin, IsStaff, IsOwnerOrAdmin
+from django.core.cache import cache
+from django.core.exceptions import ValidationError
+from rest_framework.decorators import throttle_classes
+from rest_framework.views import APIView
 
 class ProductListView(generics.ListAPIView):
     queryset = Product.objects.filter(available=True)
     serializer_class = ProductSerializer
+    def get_queryset(self):
+        cache_key = 'available_products'
+        queryset = cache.get(cache_key)
+        if not queryset:
+            queryset = Product.objects.filter(available=True)
+            cache.set(cache_key, queryset, timeout=60*15)
+        return queryset
 
 class ProductDetailView(generics.RetrieveAPIView):
     queryset = Product.objects.filter(available=True)
@@ -56,23 +67,6 @@ def cart_detail(request):
         'items': serializer.data,
         'total_price': cart.total_price
     })
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def add_to_cart(request):
-    serializer = AddToCartSerializer(data=request.data)
-    if serializer.is_valid():
-        product = Product.objects.get(id=serializer.validated_data['product_id'])
-        cart, created = Cart.objects.get_or_create(user=request.user)
-        item, created = CartItem.objects.get_or_create(
-            cart=cart,
-            product=product,
-            defaults={'quantity': serializer.validated_data['quantity']}
-        )
-        if not created:
-            item.quantity += serializer.validated_data['quantity']
-            item.save()
-        return Response({'status': 'success'})
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 def index(request):
     return render(request, 'index.html')
@@ -80,12 +74,16 @@ def index(request):
 class OrderListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
     serializer_class = OrderSerializer
+    throttle_classes = [UserRateThrottle]
 
     def get_queryset(self):
         return self.request.user.orders.all()
 
     def perform_create(self, serializer):
         cart = self.request.user.cart
+        if not cart.items.exists():
+            raise ValidationError("Корзина пуста")
+
         order = cart.create_order(
             shipping_address=serializer.validated_data['shipping_address'],
             phone=serializer.validated_data['phone'],
@@ -94,12 +92,50 @@ class OrderListCreateView(generics.ListCreateAPIView):
         )
         serializer.instance = order
     def handle_exception(self, exc):
-        if isinstance(exc, Cart.DoesNotExist):
+        if isinstance(exc, (Cart.DoesNotExist, ValidationError)):
             return Response(
-                {'error': 'Cart is empty'},
+                {'error': str(exc)},
                 status=status.HTTP_400_BAD_REQUEST
             )
         return super().handle_exception(exc)
+
+
+class AddToCartView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [CartThrottle]  # Ограничение запросов
+
+    def post(self, request):
+        serializer = AddToCartSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            product = Product.objects.get(id=serializer.validated_data['product_id'])
+            if not product.available:
+                return Response(
+                    {'error': 'Товар недоступен'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            cart, created = Cart.objects.get_or_create(user=request.user)
+            item, created = CartItem.objects.get_or_create(
+                cart=cart,
+                product=product,
+                defaults={'quantity': serializer.validated_data['quantity']}
+            )
+
+            if not created:
+                item.quantity += serializer.validated_data['quantity']
+                item.save()
+
+            return Response({'status': 'success'})
+
+        except Product.DoesNotExist:
+            return Response(
+                {'error': 'Товар не найден'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
 class ProductViewSet(viewsets.ModelViewSet):
     permission_classes = [IsStaff]
     queryset = Product.objects.filter(available=True)

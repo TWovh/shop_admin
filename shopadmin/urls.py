@@ -20,7 +20,7 @@ urlpatterns = [
         path('orders/', views.OrderListCreateView.as_view(), name='order-list'),
     ])),
     path('', index, name='index'),
-]
+] + router.urls
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
