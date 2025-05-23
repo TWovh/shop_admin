@@ -73,7 +73,7 @@ def cart_detail(request):
 
 def index(request):
     products = Product.objects.filter(available=True)[:8]  # 8 последних доступных товаров
-    return render(request, 'index.html', {'products': products})
+    return render(request, 'shop/index.html', {'products': products})
 
 class OrderListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated, IsOwnerOrAdmin]

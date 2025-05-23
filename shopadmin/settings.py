@@ -33,6 +33,7 @@ LOGGING = {
     },
 }
 
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -94,6 +95,10 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',  # Для веб-интерфейса
+        'rest_framework.authentication.TokenAuthentication',    # Для API
     ],
     'DEFAULT_THROTTLE_RATES': {
         'user': '100/hour',  # Лимит по умолчанию
