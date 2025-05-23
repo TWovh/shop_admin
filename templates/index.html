@@ -1,15 +1,24 @@
-<h1>Добро пожаловать в магазин</h1>
+{% extends 'base.html' %}
 
-<div class="api-info">
-    <h2>Доступные API endpoints:</h2>
-    <ul>
-        <li><a href="/api/products/">Список товаров (GET)</a></li>
-        <li><a href="/api/categories/">Список категорий (GET)</a></li>
-    </ul>
-</div>
+{% block content %}
+<div class="container">
+    <h1 class="my-4">Добро пожаловать в наш магазин</h1>
 
-{% if user.is_staff %}
-<div class="admin-access">
-    <a href="/admin/" class="admin-button">Перейти в панель управления</a>
+    <div class="row">
+        {% for product in products %}
+        <div class="col-md-3 mb-4">
+            <div class="card h-100">
+                {% if product.image %}
+                <img src="{{ product.image.url }}" class="card-img-top" alt="{{ product.name }}">
+                {% endif %}
+                <div class="card-body">
+                    <h5 class="card-title">{{ product.name }}</h5>
+                    <p class="card-text">{{ product.price }} руб.</p>
+                    <a href="{% url 'add_to_cart' product.id %}" class="btn btn-primary">В корзину</a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
 </div>
-{% endif %}
+{% endblock %}

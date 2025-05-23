@@ -16,7 +16,6 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.admin.forms import AdminAuthenticationForm
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
-from django.contrib.admin.models import LogEntry
 from django.contrib.admin.models import LogEntry, CHANGE, ADDITION
 from django.contrib.contenttypes.models import ContentType
 import json

@@ -91,7 +91,14 @@ DATABASES = {
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.DjangoModelPermissionsOrAnonReadOnly'
-    ]
+    ],
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'user': '100/hour',  # Лимит по умолчанию
+        'cart': '10/minute',  # Лимит для корзины
+    }
 }
 
 AUTH_PASSWORD_VALIDATORS = [

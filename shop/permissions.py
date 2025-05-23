@@ -1,4 +1,5 @@
 from rest_framework import permissions
+from rest_framework.throttling import UserRateThrottle
 
 
 class CustomPermission(permissions.BasePermission):
@@ -52,3 +53,16 @@ class IsOwnerOrAdmin(permissions.BasePermission):
             return obj.user == request.user
 
         return False
+
+
+
+class CartThrottle(UserRateThrottle):
+    """
+    Ограничение частоты запросов для корзины
+    """
+    scope = 'cart'  # Уникальный идентификатор для настроек
+    rate = '10/minute'  # 10 запросов в минуту
+    def get_rate(self):
+        if self.request.user.role == 'ADMIN':
+            return '100/minute'  # Админам больше запросов
+        return '10/minute'  # Обычным пользователям меньше
