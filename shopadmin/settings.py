@@ -9,14 +9,14 @@ load_dotenv()
 SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = True
 
-CORS_ALLOWED_ORIGINS = ['домен']
-CSRF_TRUSTED_ORIGINS = ['домен']
+"""CORS_ALLOWED_ORIGINS = ['домен']
+CSRF_TRUSTED_ORIGINS = ['домен']"""
 ALLOWED_HOSTS = []
 AUTH_USER_MODEL = 'shop.User'
 
-SESSION_COOKIE_SECURE = True
+"""SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
-SECURE_BROWSER_XSS_FILTER = True
+SECURE_BROWSER_XSS_FILTER = True"""
 
 PASSWORD_HASHERS = [
     'django.contrib.auth.hashers.Argon2PasswordHasher',

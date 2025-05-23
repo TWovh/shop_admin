@@ -14,6 +14,10 @@ class ProductSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Цена должна быть положительной.")
         return value
 
+    def validate(self, data):
+        if not data['available'] and 'price' in data:
+            raise serializers.ValidationError("Нельзя менять цену недоступного товара")
+        return data
 
     category = serializers.StringRelatedField()
 
@@ -39,6 +43,11 @@ class OrderSerializer(serializers.ModelSerializer):
         fields = ['id', 'user', 'status', 'total_price', 'shipping_address',
                   'phone', 'email', 'comments', 'created', 'items']
         read_only_fields = ['user', 'status', 'total_price', 'created', 'items']
+
+    def validate_phone(self, value):
+        if len(value) < 10:
+            raise serializers.ValidationError("Номер телефона слишком короткий")
+        return value
 
 
 class AddToCartSerializer(serializers.Serializer):

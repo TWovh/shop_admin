@@ -17,7 +17,9 @@ from django.contrib.admin.forms import AdminAuthenticationForm
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.contrib.admin.models import LogEntry
-
+from django.contrib.admin.models import LogEntry, CHANGE, ADDITION
+from django.contrib.contenttypes.models import ContentType
+import json
 
 class AdminDashboard(admin.AdminSite):
     index_template = 'admin/dashboard.html'
@@ -115,6 +117,17 @@ class AdminDashboard(admin.AdminSite):
             **self.each_context(request),
         }
         return TemplateResponse(request, 'admin/add_category.html', context)
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        LogEntry.objects.log_action(
+            user_id=request.user.pk,
+            content_type_id=ContentType.objects.get_for_model(obj).pk,
+            object_id=obj.pk,
+            object_repr=str(obj),
+            action_flag=CHANGE if change else ADDITION,
+            change_message=json.dumps(form.changed_data)
+        )
 
 
     def redirect_to_api_products(self, request):

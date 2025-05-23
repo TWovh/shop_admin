@@ -3,6 +3,8 @@ from django.urls import reverse
 from django import forms
 from .models import Product, Category, Order, OrderItem
 from shop.admin_dashboard import admin_site
+from django.http import HttpResponse
+
 
 class ProductAdminForm(forms.ModelForm):
     class Meta:
@@ -19,6 +21,8 @@ class CategoryAdmin(admin.ModelAdmin):
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
+
+    actions = ['make_available', 'make_unavailable', 'export_as_json']
     form = ProductAdminForm
     list_display = ('name', 'price', 'available', 'category', 'image_preview')
     list_filter = ('available', 'created', 'updated', 'category')
@@ -42,7 +46,14 @@ class ProductAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
-    actions = ['make_available', 'make_unavailable']
+
+    def export_as_json(self, request, queryset):
+        from django.core import serializers
+        data = serializers.serialize("json", queryset)
+        response = HttpResponse(data, content_type="application/json")
+        response['Content-Disposition'] = 'attachment; filename="products.json"'
+        return response
+    export_as_json.short_description = "Экспорт в JSON"
 
     def make_available(self, request, queryset):
         queryset.update(available=True)

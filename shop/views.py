@@ -13,6 +13,7 @@ from django.contrib.auth import login
 from django.shortcuts import render, redirect
 from .forms import UserRegistrationForm
 from rest_framework.throttling import UserRateThrottle
+from .permissions import IsAdmin, IsStaff, IsOwnerOrAdmin
 
 class ProductListView(generics.ListAPIView):
     queryset = Product.objects.filter(available=True)
@@ -77,7 +78,7 @@ def index(request):
     return render(request, 'index.html')
 
 class OrderListCreateView(generics.ListCreateAPIView):
-    permission_classes = [permissions.IsAuthenticated, CustomPermission]
+    permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
     serializer_class = OrderSerializer
 
     def get_queryset(self):
@@ -100,9 +101,9 @@ class OrderListCreateView(generics.ListCreateAPIView):
             )
         return super().handle_exception(exc)
 class ProductViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsStaff]
     queryset = Product.objects.filter(available=True)
     serializer_class = ProductSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()

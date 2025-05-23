@@ -121,6 +121,10 @@ class Product(models.Model):
     def get_absolute_url(self):
         return reverse('shop:product_detail', args=[self.id, self.slug])
 
+    def clean(self):
+        if self.price <= 0:
+            raise ValidationError("Цена должна быть положительной")
+
 
 class Cart(models.Model):
     user = models.OneToOneField(
@@ -275,6 +279,9 @@ class Order(models.Model):
         ordering = ('-created',)
         verbose_name = 'Заказ'
         verbose_name_plural = 'Заказы'
+
+    def can_be_modified(self):
+        return self.status in ['new', 'processing']
 
     def __str__(self):
         return f"Заказ #{self.id} ({self.get_status_display()})"
