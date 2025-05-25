@@ -97,6 +97,7 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.UserRateThrottle',
     ],
     'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication'
         'rest_framework.authentication.SessionAuthentication',  # Для веб-интерфейса
         'rest_framework.authentication.TokenAuthentication',    # Для API
     ],
@@ -104,6 +105,11 @@ REST_FRAMEWORK = {
         'user': '100/hour',  # Лимит по умолчанию
         'cart': '10/minute',  # Лимит для корзины
     }
+}
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
 }
 
 AUTH_PASSWORD_VALIDATORS = [
