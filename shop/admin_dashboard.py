@@ -18,6 +18,10 @@ from django.core.exceptions import ValidationError
 from django.contrib.admin.models import LogEntry, CHANGE, ADDITION
 from django.contrib.contenttypes.models import ContentType
 import json
+from typing import Any
+from django.http import HttpRequest, HttpResponse
+from .types import AuthenticatedRequest, AuthRequest
+
 
 class AdminDashboard(admin.AdminSite):
     index_template = 'admin/dashboard.html'
@@ -34,20 +38,20 @@ class AdminDashboard(admin.AdminSite):
         return custom_urls + urls
 
     def admin_view(self, view, cacheable=False):
-        # Обертка для проверки прав доступа
-        inner_view = super().admin_view(view, cacheable)
+        from functools import wraps
 
-        @staff_member_required
-        def wrapped_view(request, *args, **kwargs):
-            if not request.user.role in ['ADMIN', 'STAFF']:
+        def wrapper(request: AuthRequest, *args, **kwargs):
+            if not isinstance(request.user, User):
+                return self.login(request)
+
+            user: User = request.user
+
+            if not user.is_staff_member():
                 return self.no_permission(request)
 
-            if request.user.role not in ['ADMIN', 'STAFF']:
-                return self.no_permission(request)
+            return view(request, *args, **kwargs)
 
-            return inner_view(request, *args, **kwargs)
-
-        return wrapped_view
+        return super().admin_view(wrapper, cacheable)
 
     def get_app_list(self, request, app_label=None):
         app_list = super().get_app_list(request, app_label)
@@ -133,14 +137,12 @@ class AdminDashboard(admin.AdminSite):
         )
 
 
-    def no_permission(self, request):
-        """
-        Кастомная обработка случаев, когда нет прав доступа
-        """
-        context = {
-            **self.each_context(request),
+    def no_permission(self, request: AuthenticatedRequest) -> HttpResponse:
+        context = self.each_context(request)
+        context.update({
             'title': 'Доступ запрещен',
-        }
+            'user_role': request.user.get_role_display(),
+        })
         return TemplateResponse(
             request,
             'admin/no_permission.html',
@@ -196,9 +198,9 @@ class AdminDashboard(admin.AdminSite):
             'product_count': Product.objects.count()
         }
 
-    def index(self, request, extra_context=None):
-        if not request.user.is_authenticated:
-            return self.login(request)
+    def index(self, request: AuthenticatedRequest, extra_context=None) -> HttpResponse:
+        if not request.user.is_admin():
+            return self.no_permission(request)
 
         if request.user.role not in ['ADMIN', 'STAFF']:
             return self.no_permission(request)

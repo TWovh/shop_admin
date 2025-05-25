@@ -33,15 +33,15 @@ class UserManager(BaseUserManager):
         return self.create_user(email, password, **extra_fields)
 
 class User(AbstractUser):
-    ROLES = (
-        ('ADMIN', 'Администратор'),
-        ('STAFF', 'Менеджер'),
-        ('USER', 'Пользователь'),
-    )
-    role: str = models.CharField(
+    class Role(models.TextChoices):
+        ADMIN = 'ADMIN', 'Администратор'
+        STAFF = 'STAFF', 'Менеджер'
+        USER = 'USER', 'Пользователь'
+
+    role: models.CharField = models.CharField(
         max_length=5,
-        choices=ROLES,
-        default='USER',
+        choices=Role.choices,
+        default=Role.USER,
         verbose_name='Роль'
     )
 
@@ -69,6 +69,12 @@ class User(AbstractUser):
         if self.password and not self.password.startswith(('pbkdf2_sha256$', 'bcrypt$')):
             validate_password(self.password)
         super().save(*args, **kwargs)
+
+    def is_admin(self) -> bool:
+        return self.role == self.Role.ADMIN
+
+    def is_staff_member(self) -> bool:
+        return self.role in [self.Role.ADMIN, self.Role.STAFF]
 
 class Category(models.Model):
     name = models.CharField(max_length=200, db_index=True)
