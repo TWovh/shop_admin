@@ -11,7 +11,6 @@ from django.utils.html import format_html
 from django.template.response import TemplateResponse
 from django.contrib.auth.models import User, Group, AbstractUser
 from django.contrib.auth.admin import UserAdmin, GroupAdmin
-from django.contrib.auth.decorators import permission_required, user_passes_test
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.admin.forms import AdminAuthenticationForm
 from django.core.cache import cache
@@ -39,8 +38,13 @@ class AdminDashboard(admin.AdminSite):
         inner_view = super().admin_view(view, cacheable)
 
         @staff_member_required
-        @user_passes_test(lambda u: u.has_perm('shop.view_dashboard'))
         def wrapped_view(request, *args, **kwargs):
+            if not request.user.role in ['ADMIN', 'STAFF']:
+                return self.no_permission(request)
+
+            if request.user.role not in ['ADMIN', 'STAFF']:
+                return self.no_permission(request)
+
             return inner_view(request, *args, **kwargs)
 
         return wrapped_view
@@ -49,7 +53,7 @@ class AdminDashboard(admin.AdminSite):
         app_list = super().get_app_list(request, app_label)
 
         # Проверка прав перед добавлением разделов
-        if request.user.has_perm('shop.view_dashboard'):
+        if request.user.role in ['ADMIN', 'STAFF']:
             for app in app_list:
                 if app['app_label'] == 'auth':
                     app['models'].append({
@@ -60,7 +64,7 @@ class AdminDashboard(admin.AdminSite):
                     })
                     break
 
-        if request.user.has_perm('shop.manage_cart'):
+        if request.user.role in ['ADMIN', 'STAFF']:
             app_list.append({
                 'name': 'Корзины',
                 'app_label': 'carts',
@@ -129,6 +133,21 @@ class AdminDashboard(admin.AdminSite):
         )
 
 
+    def no_permission(self, request):
+        """
+        Кастомная обработка случаев, когда нет прав доступа
+        """
+        context = {
+            **self.each_context(request),
+            'title': 'Доступ запрещен',
+        }
+        return TemplateResponse(
+            request,
+            'admin/no_permission.html',
+            context,
+            status=403
+        )
+
     def redirect_to_api_products(self, request):
         return redirect(reverse('api-products'))  # Проверить есть ли он юрлс
 
@@ -177,8 +196,13 @@ class AdminDashboard(admin.AdminSite):
             'product_count': Product.objects.count()
         }
 
-    @permission_required('shop.view_dashboard', raise_exception=True)
     def index(self, request, extra_context=None):
+        if not request.user.is_authenticated:
+            return self.login(request)
+
+        if request.user.role not in ['ADMIN', 'STAFF']:
+            return self.no_permission(request)
+
         extra_context = extra_context or {}
         stats = self.get_dashboard_stats()
 
@@ -260,28 +284,16 @@ class RoleBasedAdmin(admin.ModelAdmin):
     roles_with_access = ['ADMIN', 'STAFF']
 
     def has_module_permission(self, request):
-        return (
-                request.user.is_authenticated and
-                request.user.role in self.roles_with_access
-        )
+        return request.user.is_authenticated and request.user.role in ['ADMIN', 'STAFF']
 
     def has_add_permission(self, request):
-        return (
-                request.user.is_authenticated and
-                request.user.role in self.roles_with_access
-        )
+        return request.user.role in ['ADMIN', 'STAFF']
 
     def has_change_permission(self, request, obj=None):
-        return (
-                request.user.is_authenticated and
-                request.user.role in self.roles_with_access
-        )
+        return request.user.role in ['ADMIN', 'STAFF']
 
     def has_delete_permission(self, request, obj=None):
-        return (
-                request.user.is_authenticated and
-                request.user.role == 'ADMIN'
-        )
+        return request.user.role == 'ADMIN'
 
 @admin.register(Product, site=admin_site)
 class DashboardProductAdmin(RoleBasedAdmin):
