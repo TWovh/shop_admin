@@ -18,10 +18,8 @@ from django.core.exceptions import ValidationError
 from django.contrib.admin.models import LogEntry, CHANGE, ADDITION
 from django.contrib.contenttypes.models import ContentType
 import json
-from typing import Any
 from django.http import HttpRequest, HttpResponse
 from .types import AuthenticatedRequest, AuthRequest
-
 
 class AdminDashboard(admin.AdminSite):
     index_template = 'admin/dashboard.html'
@@ -40,18 +38,28 @@ class AdminDashboard(admin.AdminSite):
     def admin_view(self, view, cacheable=False):
         from functools import wraps
 
-        def wrapper(request: AuthRequest, *args, **kwargs):
-            if not isinstance(request.user, User):
+        @wraps(view)
+        def wrapper(request: HttpRequest, *args, **kwargs):
+            if not hasattr(request, 'POST'):
+                request.POST = getattr(request, 'POST', {})
+
+            if not request.user.is_authenticated:
                 return self.login(request)
 
-            user: User = request.user
-
-            if not user.is_staff_member():
+            if not hasattr(request.user, 'role') or request.user.role not in ['ADMIN', 'STAFF']:
                 return self.no_permission(request)
 
             return view(request, *args, **kwargs)
 
         return super().admin_view(wrapper, cacheable)
+
+    def has_permission(self, request):
+        return (
+                request.user.is_authenticated and
+                hasattr(request.user, 'role') and
+                request.user.role in ['ADMIN', 'STAFF']
+        )
+
 
     def get_app_list(self, request, app_label=None):
         app_list = super().get_app_list(request, app_label)
@@ -199,8 +207,6 @@ class AdminDashboard(admin.AdminSite):
         }
 
     def index(self, request: AuthenticatedRequest, extra_context=None) -> HttpResponse:
-        if not request.user.is_admin():
-            return self.no_permission(request)
 
         if request.user.role not in ['ADMIN', 'STAFF']:
             return self.no_permission(request)
@@ -243,41 +249,43 @@ class AdminDashboard(admin.AdminSite):
         return super().index(request, extra_context)
 
     def statistics_view(self, request):
-        start_date = request.GET.get('start_date')
-        end_date = request.GET.get('end_date')
-
-        orders = Order.objects.all()
-
-        if start_date:
-            orders = orders.filter(created__gte=start_date)
-        if end_date:
-            orders = orders.filter(created__lte=end_date)
-
-        paginator = Paginator(orders, 25)
-        page_number = request.GET.get('page')
-
         try:
-            page_obj = paginator.get_page(page_number)
-        except Http404:
-            page_obj = paginator.get_page(1)
+            start_date = request.GET.get('start_date')
+            end_date = request.GET.get('end_date')
 
-        categories_stats = (
-            Category.objects
-            .annotate(total_sales=Sum('products__orderitem__price'))
-            .exclude(total_sales=None)
-            .order_by('-total_sales')
-        )
+            orders = Order.objects.all()
 
-        context = {
-            'total_sales': orders.aggregate(total=Sum('total_price'))['total'] or 0,
-            'orders_count': orders.count(),
-            'recent_orders': orders.order_by('-created')[:10],
-            'categories_stats': categories_stats,
-            **self.each_context(request),
-            'title': 'Статистика продаж',
-        }
-        return TemplateResponse(request, 'admin/statistics.html', context)
+            if start_date:
+                orders = orders.filter(created__gte=start_date)
+            if end_date:
+                orders = orders.filter(created__lte=end_date)
 
+            paginator = Paginator(orders, 25)
+            page_number = request.GET.get('page')
+
+            try:
+                page_obj = paginator.get_page(page_number)
+            except Http404:
+                page_obj = paginator.get_page(1)
+
+            categories_stats = (
+                Category.objects
+                .annotate(total_sales=Sum('products__orderitem__price'))
+                .exclude(total_sales=None)
+                .order_by('-total_sales')
+            )
+
+            context = {
+                'total_sales': orders.aggregate(total=Sum('total_price'))['total'] or 0,
+                'orders_count': orders.count(),
+                'recent_orders': orders.order_by('-created')[:10],
+                'categories_stats': categories_stats,
+                **self.each_context(request),
+                'title': 'Статистика продаж',
+            }
+            return TemplateResponse(request, 'admin/statistics.html', context)
+        except Exception as e:
+            return self.message_user(request, f"Ошибка: {str(e)}", level='error')
 # Замена админки через эту команду
 admin_site = AdminDashboard(name='myadmin')
 
@@ -286,16 +294,13 @@ class RoleBasedAdmin(admin.ModelAdmin):
     roles_with_access = ['ADMIN', 'STAFF']
 
     def has_module_permission(self, request):
-        return request.user.is_authenticated and request.user.role in ['ADMIN', 'STAFF']
+        return self.has_permission(request)
 
-    def has_add_permission(self, request):
-        return request.user.role in ['ADMIN', 'STAFF']
-
-    def has_change_permission(self, request, obj=None):
-        return request.user.role in ['ADMIN', 'STAFF']
-
-    def has_delete_permission(self, request, obj=None):
-        return request.user.role == 'ADMIN'
+    def has_permission(self, request):
+        return (
+                request.user.is_authenticated and
+                request.user.role in ['ADMIN', 'STAFF']
+        )
 
 @admin.register(Product, site=admin_site)
 class DashboardProductAdmin(RoleBasedAdmin):
@@ -443,5 +448,8 @@ class CustomAdminAuthForm(AdminAuthenticationForm):
 
 @admin.register(LogEntry, site=admin_site)
 class LogEntryAdmin(admin.ModelAdmin):
-    list_display = ['action_time', 'user', 'content_type', 'change_message']
-    readonly_fields = ['action_time', 'user', 'content_type']
+    list_display = ['action_time', 'user', 'content_type', 'object_repr', 'action_flag']
+    list_filter = ['action_flag', 'content_type']
+    search_fields = ['user__email', 'object_repr', 'change_message']
+    readonly_fields = list_display
+    date_hierarchy = 'action_time'

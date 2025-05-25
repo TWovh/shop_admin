@@ -14,9 +14,16 @@ CSRF_TRUSTED_ORIGINS = ['домен']"""
 ALLOWED_HOSTS = []
 AUTH_USER_MODEL = 'shop.User'
 
-"""SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
-SECURE_BROWSER_XSS_FILTER = True"""
+SESSION_COOKIE_SECURE = False
+CSRF_COOKIE_SECURE = False
+SECURE_BROWSER_XSS_FILTER = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+SECURE_SSL_REDIRECT = False
+CSRF_COOKIE_SAMESITE = 'Lax'
+
+LOGIN_URL = '/admin/login/'
+LOGIN_REDIRECT_URL = '/admin/'
+LOGOUT_REDIRECT_URL = '/admin/login/'
 
 PASSWORD_HASHERS = [
     'django.contrib.auth.hashers.Argon2PasswordHasher',
@@ -42,6 +49,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "rest_framework_simplejwt"
     "shop.apps.ShopConfig",
     "django.contrib.humanize",
 
@@ -55,6 +63,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "shop.middleware.AuthMiddleware",
 ]
 
 ROOT_URLCONF = "shopadmin.urls"
@@ -149,8 +158,6 @@ STATICFILES_DIRS = [
 
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-import os
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Директория для collectstatic
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')

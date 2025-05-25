@@ -19,7 +19,7 @@ from django.core.exceptions import ValidationError
 from rest_framework.views import APIView
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404
-
+from .types import AuthenticatedRequest
 
 class ProductListView(generics.ListAPIView):
     queryset = Product.objects.filter(available=True)

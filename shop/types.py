@@ -1,15 +1,23 @@
 # улучшаем для понимания у джанго
 from django.http import HttpRequest
-from django.contrib.auth.models import AnonymousUser
+from django.contrib.auth.models import AnonymousUser, AbstractUser
 from typing import Union
 from .models import User
 
+from django.http import HttpRequest
+from django.contrib.auth.models import AbstractUser
+
+
 class AuthenticatedRequest(HttpRequest):
-    """
-    Кастомный тип для аутентифицированных запросов,
-    где user точно является нашей моделью User
-    """
-    user: User
+    user: AbstractUser
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.GET = {}
+        self.POST = {}
+        self.COOKIES = {}
+        self.FILES = {}
+        self.META = {}
 
 class AuthRequest(HttpRequest):
     """

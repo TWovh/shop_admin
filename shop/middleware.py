@@ -6,7 +6,16 @@ class AuthMiddleware:
         self.get_response = get_response
 
     def __call__(self, request: HttpRequest):
-        # Приводим тип после аутентификации
-        if hasattr(request, 'user') and request.user.is_authenticated:
-            request.__class__ = AuthenticatedRequest
+        if request.user.is_authenticated:
+            auth_request = AuthenticatedRequest()
+
+            for attr in ['GET', 'POST', 'COOKIES', 'FILES', 'META', 'user']:
+                if hasattr(request, attr):
+                    setattr(auth_request, attr, getattr(request, attr))
+
+            auth_request.META = request.META.copy()
+            auth_request._body = getattr(request, '_body', None)
+
+            request = auth_request
+
         return self.get_response(request)
