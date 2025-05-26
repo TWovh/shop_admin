@@ -7,7 +7,7 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
     TokenVerifyView
 )
-from shop.views import index
+from shop.views import index, register
 
 
 urlpatterns = [
@@ -19,6 +19,7 @@ urlpatterns = [
     path('api/auth/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/auth/token/verify/', TokenVerifyView.as_view(), name='token_verify'),
+    path('register/', register, name='register'),
 
     # Auth views
     path('auth/', include('django.contrib.auth.urls')),

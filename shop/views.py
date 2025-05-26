@@ -175,7 +175,7 @@ def register(request):
             return redirect('home')
     else:
         form = UserRegistrationForm()
-    return render(request, 'register.html', {'form': form})
+    return render(request, 'registration/register.html', {'form': form})
 
 class UpdateCartItemView(APIView):
     permission_classes = [IsAuthenticated]
