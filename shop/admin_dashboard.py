@@ -7,11 +7,9 @@ from django.utils import timezone
 from datetime import timedelta
 from django.core.paginator import Paginator
 from django.http import Http404
-from django.utils.html import format_html
 from django.template.response import TemplateResponse
-from django.contrib.auth.models import User, Group, AbstractUser
+from django.contrib.auth.models import Group, AbstractUser
 from django.contrib.auth.admin import UserAdmin, GroupAdmin
-from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.admin.forms import AdminAuthenticationForm
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
@@ -20,6 +18,7 @@ from django.contrib.contenttypes.models import ContentType
 import json
 from django.http import HttpRequest, HttpResponse
 from .types import AuthenticatedRequest, AuthRequest
+from .models import User
 
 class AdminDashboard(admin.AdminSite):
     index_template = 'admin/dashboard.html'
@@ -190,7 +189,6 @@ class AdminDashboard(admin.AdminSite):
             total_sales=Sum('total_price'),
             avg_order=Avg('total_price')
         )
-        from django.contrib.auth.models import User
         user_stats = {
             'user_count': User.objects.count(),
             'active_users': User.objects.filter(is_active=True).count()

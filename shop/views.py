@@ -1,8 +1,9 @@
+from .models import Product
 from rest_framework import generics
 from django.http import HttpResponse
 from .serializers import ProductSerializer, CategorySerializer
 from .cart_serializers import CartItemSerializer, AddToCartSerializer
-from .models import Product, Category, Cart, CartItem
+from .models import Category, Cart, CartItem
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes, action
@@ -17,7 +18,6 @@ from .permissions import IsAdmin, IsStaff, IsOwnerOrAdmin, CartThrottle
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from rest_framework.views import APIView
-from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404
 from .types import AuthenticatedRequest
 
@@ -45,17 +45,6 @@ class CategoryDetailView(generics.RetrieveAPIView):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
 
-def home(request):
-    return HttpResponse("""
-        <h1>Добро пожаловать в магазин</h1>
-        <p>Доступные API endpoints:</p>
-        <ul>
-            <li><a href="/api/products/">Товары</a></li>
-            <li><a href="/api/categories/">Категории</a></li>
-            <li><a href="/admin/">Админка</a></li>
-        </ul>
-    """)
-
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -72,8 +61,16 @@ def cart_detail(request):
     })
 
 def index(request):
-    products = Product.objects.filter(available=True)[:8]  # 8 последних доступных товаров
-    return render(request, 'shop/index.html', {'products': products})
+    try:
+        products = Product.objects.filter(available=True).order_by('-created')[:8]
+        return render(request, 'shop/index.html', {'products': products})
+    except Exception as e:
+        # Логирование ошибки для отладки
+        print(f"Error in index view: {str(e)}")
+        return render(request, 'shop/index.html', {'products': []})
+
+"""def index(request):
+    return HttpResponse("Test page - works!")"""
 
 class OrderListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
@@ -154,31 +151,6 @@ class CartView(APIView):
             return redirect('cart')
         return Response({'status': 'success'})
 
-    @action(detail=True, methods=['POST'])
-    def update_item(self, request, item_id):
-        """Обновление количества товара"""
-        cart_item = get_object_or_404(CartItem, id=item_id, cart__user=request.user)
-        quantity = int(request.data.get('quantity', 1))
-
-        if quantity > 0:
-            cart_item.quantity = quantity
-            cart_item.save()
-        else:
-            cart_item.delete()
-
-        if request.accepted_renderer.format == 'html':
-            return redirect('cart')
-        return Response({'status': 'updated'})
-
-    @action(detail=True, methods=['DELETE'])
-    def remove_item(self, request, item_id):
-        """Удаление товара из корзины"""
-        cart_item = get_object_or_404(CartItem, id=item_id, cart__user=request.user)
-        cart_item.delete()
-
-        if request.accepted_renderer.format == 'html':
-            return redirect('cart')
-        return Response({'status': 'removed'})
 
 class ProductViewSet(viewsets.ModelViewSet):
     permission_classes = [IsStaff]
@@ -205,3 +177,25 @@ def register(request):
         form = UserRegistrationForm()
     return render(request, 'register.html', {'form': form})
 
+class UpdateCartItemView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, item_id):
+        cart_item = get_object_or_404(CartItem, id=item_id, cart__user=request.user)
+        quantity = int(request.data.get('quantity', 1))
+
+        if quantity > 0:
+            cart_item.quantity = quantity
+            cart_item.save()
+        else:
+            cart_item.delete()
+
+        return Response({'status': 'updated'}, status=status.HTTP_200_OK)
+
+class RemoveCartItemView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, item_id):
+        cart_item = get_object_or_404(CartItem, id=item_id, cart__user=request.user)
+        cart_item.delete()
+        return Response({'status': 'removed'}, status=status.HTTP_204_NO_CONTENT)

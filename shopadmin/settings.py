@@ -49,7 +49,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
-    "rest_framework_simplejwt"
+    "rest_framework_simplejwt",
     "shop.apps.ShopConfig",
     "django.contrib.humanize",
 
@@ -61,9 +61,9 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "shop.middleware.AuthMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "shop.middleware.AuthMiddleware",
 ]
 
 ROOT_URLCONF = "shopadmin.urls"

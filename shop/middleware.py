@@ -1,21 +1,30 @@
-from .types import AuthenticatedRequest
+from django.utils.deprecation import MiddlewareMixin
 from django.http import HttpRequest
+# Импорт AuthenticatedRequest и User из types.py для аннотаций типов, если нужно
 
-class AuthMiddleware:
-    def __init__(self, get_response):
-        self.get_response = get_response
 
-    def __call__(self, request: HttpRequest):
+# Если вы хотите использовать ваш AuthenticatedRequest для тайп-хинтинга в представлениях,
+# вы можете его импортировать, но не использовать для изменения __class__
+# from .types import AuthenticatedRequest as AuthenticatedRequestTypeHint
+
+class AuthMiddleware(MiddlewareMixin):
+    def process_request(self, request: HttpRequest):
         if request.user.is_authenticated:
-            auth_request = AuthenticatedRequest()
 
-            for attr in ['GET', 'POST', 'COOKIES', 'FILES', 'META', 'user']:
-                if hasattr(request, attr):
-                    setattr(auth_request, attr, getattr(request, attr))
 
-            auth_request.META = request.META.copy()
-            auth_request._body = getattr(request, '_body', None)
+            # Для type checker'ов можно сделать так, чтобы они знали о новых атрибутах:
+            setattr(request, 'authenticated_user', request.user)
+            setattr(request, 'user_role', getattr(request.user, 'role', None))  # Безопасное получение роли
 
-            request = auth_request
 
-        return self.get_response(request)
+        request.authenticated_user = request.user
+        request.user_role = request.user.role
+
+        return None
+
+    def process_response(self, request: HttpRequest, response):
+        if hasattr(request, 'authenticated_user'):
+            delattr(request, 'authenticated_user')
+        if hasattr(request, 'user_role'):
+            delattr(request, 'user_role')
+        return response

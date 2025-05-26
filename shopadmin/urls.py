@@ -7,11 +7,13 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
     TokenVerifyView
 )
+from shop.views import index
+
 
 urlpatterns = [
+    path('', index, name='index'),
     path('admin/', admin_site.urls),
     path('api/', include('shop.urls_api')),
-    path('', include('shop.urls_views')),
 
     # JWT Authentication
     path('api/auth/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
@@ -20,6 +22,7 @@ urlpatterns = [
 
     # Auth views
     path('auth/', include('django.contrib.auth.urls')),
+    path('shop/', include('shop.urls_views')),
 ]
 
 if settings.DEBUG:
