@@ -1,28 +1,56 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block content %}
-<div class="login-form">
-    <h2>Вход в систему</h2>
-    <form id="loginForm">
-        <input type="text" id="username" placeholder="Логин" required>
-        <input type="password" id="password" placeholder="Пароль" required>
-        <button type="submit">Войти</button>
-    </form>
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-body">
+                    <h2 class="card-title text-center mb-4">Вход в систему</h2>
+
+                    <!-- Стандартная Django форма -->
+                    <form method="post" action="{% url 'login' %}">
+                        {% csrf_token %}
+
+                        <!-- Вывод ошибок -->
+                        {% if form.errors %}
+                            <div class="alert alert-danger">
+                                Неверный логин или пароль
+                            </div>
+                        {% endif %}
+
+                        <!-- Поля формы -->
+                        <div class="mb-3">
+                            <label for="id_username" class="form-label">Логин</label>
+                            <input type="text"
+                                   name="username"
+                                   class="form-control"
+                                   id="id_username"
+                                   required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="id_password" class="form-label">Пароль</label>
+                            <input type="password"
+                                   name="password"
+                                   class="form-control"
+                                   id="id_password"
+                                   required>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-box-arrow-in-right"></i> Войти
+                            </button>
+                            <a href="{% url 'register' %}" class="btn btn-link">
+                                Нет аккаунта? Зарегистрируйтесь
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
-
-<script>
-    document.getElementById('loginForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-
-        const username = document.getElementById('username').value;
-        const password = document.getElementById('password').value;
-
-        try {
-            await authService.login(username, password);
-            window.location.href = '/'; // Перенаправление после успешного входа
-        } catch (error) {
-            alert(error.message);
-        }
-    });
-</script>
 {% endblock %}
