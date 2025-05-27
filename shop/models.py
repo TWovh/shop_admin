@@ -198,6 +198,19 @@ class Cart(models.Model):
 
         return order
 
+    def add_product(self, product, quantity=1):
+        item, created = CartItem.objects.get_or_create(
+            cart=self,
+            product=product,
+            defaults={'quantity': quantity}
+        )
+
+        if not created:
+            item.quantity += quantity
+            item.save()
+
+        return item
+
     def clear(self):
         """Очистка корзины"""
         self.items.all().delete()

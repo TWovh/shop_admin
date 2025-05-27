@@ -20,6 +20,7 @@ from django.core.exceptions import ValidationError
 from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
 from .types import AuthenticatedRequest
+from django.contrib import messages
 
 class ProductListView(generics.ListAPIView):
     queryset = Product.objects.filter(available=True)
@@ -176,6 +177,28 @@ def register(request):
     else:
         form = UserRegistrationForm()
     return render(request, 'registration/register.html', {'form': form})
+
+
+def add_to_cart(request, product_id=None):
+    if not request.user.is_authenticated:
+        messages.error(request, "Для добавления в корзину войдите в систему")
+        return redirect('login')
+
+    product = get_object_or_404(Product, id=product_id)
+    cart, _ = Cart.objects.get_or_create(user=request.user)
+
+    item, created = CartItem.objects.get_or_create(
+        cart=cart,
+        product=product,
+        defaults={'quantity': 1}
+    )
+
+    if not created:
+        item.quantity += 1
+        item.save()
+
+    messages.success(request, f"Товар {product.name} добавлен в корзину")
+    return redirect('product-list')
 
 class UpdateCartItemView(APIView):
     permission_classes = [IsAuthenticated]

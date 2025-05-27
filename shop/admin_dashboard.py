@@ -232,7 +232,7 @@ class AdminDashboard(admin.AdminSite):
                 },
                 {
                     'name': 'Добавить в корзину',
-                    'url': reverse('add-to-cart'),
+                    'url': reverse('add-to-cart', args=[1]),  # Пример с product_id=1
                     'method': 'POST'
                 }
             ],
@@ -324,18 +324,6 @@ class DashboardOrderAdmin(admin.ModelAdmin):
     list_filter = ('status', 'created')
     search_fields = ('user__username', 'id')
 
-
-
-def redirect_to_api_cart_add(self, request):
-    if request.method == 'POST':
-        return redirect(reverse('myadmin:api-cart-add'))
-
-    context = {
-        **self.each_context(request),
-        'title': 'Добавить в корзину',
-        'opts': self._registry[Order].model._meta,
-    }
-    return render(request, 'admin/cart_add_form.html', context)
 
 
 @admin.register(Category, site=admin_site)
