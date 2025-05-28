@@ -97,6 +97,7 @@ class Product(models.Model):
     name = models.CharField(max_length=200, db_index=True)
     slug = models.SlugField(max_length=200, db_index=True)
     image = models.ImageField(upload_to='products/%Y/%m/%d', blank=True, verbose_name="Изображение")
+    stock = models.IntegerField(default=0)
 
     def image_preview(self):
         if self.image:
