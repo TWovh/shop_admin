@@ -29,8 +29,6 @@ class AdminDashboard(admin.AdminSite):
         urls = super().get_urls()
         custom_urls = [
             path('statistics/', self.admin_view(self.statistics_view), name='statistics'),
-            path('api/cart/add/', self.admin_view(self.redirect_to_api_cart_add), name='api-cart-add'),
-
         ]
         return custom_urls + urls
 

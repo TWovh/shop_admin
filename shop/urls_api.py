@@ -8,11 +8,13 @@ from .views import (
 )
 
 router = DefaultRouter()
-router.register(r'products', ProductViewSet, basename='product')
-router.register(r'categories', CategoryViewSet, basename='category')
+router.register(r'products', ProductViewSet, basename='api-product')  # Измените basename
+router.register(r'categories', CategoryViewSet, basename='api-category')
 
-urlpatterns = [
-    path('cart/', CartView.as_view(), name='cart-api'),
-    path('cart/items/<int:item_id>/', CartView.as_view(), name='cart-item-detail'),
-    path('orders/', OrderListCreateView.as_view(), name='order-list'),
-] + router.urls
+api_urlpatterns = [
+    path('cart/', CartView.as_view(), name='api-cart'),
+    path('cart/items/<int:item_id>/', CartView.as_view(), name='api-cart-item-detail'),
+    path('orders/', OrderListCreateView.as_view(), name='api-order-list'),
+]
+
+urlpatterns = api_urlpatterns + router.urls

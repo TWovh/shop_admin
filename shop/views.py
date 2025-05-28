@@ -1,25 +1,22 @@
 from .models import Product
 from rest_framework import generics
-from django.http import HttpResponse
 from .serializers import ProductSerializer, CategorySerializer
 from .cart_serializers import CartItemSerializer, AddToCartSerializer
 from .models import Category, Cart, CartItem
-from rest_framework import status
+from rest_framework import status, viewsets
 from rest_framework.response import Response
-from rest_framework.decorators import api_view, permission_classes, action
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from .serializers import OrderSerializer
-from rest_framework import viewsets
 from django.contrib.auth import login
 from django.shortcuts import render, redirect
 from .forms import UserRegistrationForm
 from rest_framework.throttling import UserRateThrottle
-from .permissions import IsAdmin, IsStaff, IsOwnerOrAdmin, CartThrottle
+from .permissions import IsStaff, IsOwnerOrAdmin, CartThrottle
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
-from .types import AuthenticatedRequest
 from django.contrib import messages
 
 class ProductListView(generics.ListAPIView):
@@ -70,8 +67,7 @@ def index(request):
         print(f"Error in index view: {str(e)}")
         return render(request, 'shop/index.html', {'products': []})
 
-"""def index(request):
-    return HttpResponse("Test page - works!")"""
+
 
 class OrderListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
@@ -114,7 +110,7 @@ class CartView(APIView):
         total_price = sum(item.total_price for item in cart_items)
 
         if request.accepted_renderer.format == 'html':
-            return render(request, 'cart.html', {
+            return render(request, 'admin/cart.html', {
                 'cart_items': cart_items,
                 'total_price': total_price
             })
