@@ -5,7 +5,6 @@ from .cart_serializers import CartItemSerializer, AddToCartSerializer
 from .models import Category, Cart, CartItem
 from rest_framework import status, viewsets
 from rest_framework.response import Response
-from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from .serializers import OrderSerializer
 from django.contrib.auth import login
@@ -43,20 +42,6 @@ class CategoryDetailView(generics.RetrieveAPIView):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
 
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def cart_detail(request):
-    try:
-        cart = Cart.objects.get(user=request.user)
-    except Cart.DoesNotExist:
-        cart = Cart.objects.create(user=request.user)
-
-    serializer = CartItemSerializer(cart.items.all(), many=True)
-    return Response({
-        'items': serializer.data,
-        'total_price': cart.total_price
-    })
 
 def index(request):
     try:

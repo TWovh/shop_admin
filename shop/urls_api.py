@@ -15,6 +15,7 @@ api_urlpatterns = [
     path('cart/', CartView.as_view(), name='api-cart'),
     path('cart/items/<int:item_id>/', CartView.as_view(), name='api-cart-item-detail'),
     path('orders/', OrderListCreateView.as_view(), name='api-order-list'),
+
 ]
 
 urlpatterns = api_urlpatterns + router.urls

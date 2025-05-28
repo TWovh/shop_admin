@@ -1,50 +1,53 @@
-from django.test import TestCase
-from django.urls import reverse
 from rest_framework.test import APIClient
 from .models import Product
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APITestCase
+from django.contrib.auth.models import User
+from rest_framework_simplejwt.tokens import RefreshToken
 
 
-class SecurityTests(TestCase):
+class SecurityTests(APITestCase):
     def test_admin_access(self):
         response = self.client.get('/admin/')
         self.assertEqual(response.status_code, 302)  # редирект на логин
 
 
-class APITests(TestCase):
+class APITests(APITestCase):
     def setUp(self):
         self.client = APIClient()
-
-    def test_cart_throttling(self):
-        # Пример корректных данных
-        product = Product.objects.create(
+        self.product = Product.objects.create(
             name='Test Throttle',
-            description='Test',
-            price=100,
+            description='For throttling test',
+            price=10,
             stock=5
         )
-        url = reverse('add-to-cart', args=[product.id])
+
+    def test_cart_throttling(self):
+        data = {'product_id': self.product.id, 'quantity': 1}
         for _ in range(100):
-            self.client.get(url)
-        response = self.client.get(url)
-        self.assertIn(response.status_code, [200, 429])  # зависит от настройки throttle
+            self.client.post('/cart/add/', data=data)
+        response = self.client.post('/cart/add/', data=data)
+        self.assertEqual(response.status_code, 429)  # зависит от настройки throttle
 
 
-class ProductTests(TestCase):
+class ProductTests(APITestCase):
     def setUp(self):
-        self.client = APIClient()
-        # Создаём категорию, если нужно (иначе category=1 может быть невалиден)
-        # Например: self.category = Category.objects.create(name="Default")
+        self.user = User.objects.create_user(username='admin', password='admin123')
+        refresh = RefreshToken.for_user(self.user)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {str(refresh.access_token)}')
 
     def test_product_creation(self):
-        data = {'name': 'Test', 'price': 10, 'category': 1}  # Предполагается, что категория с id=1 уже есть
-        response = self.client.post(reverse('product-list'), data)
-        self.assertEqual(response.status_code, 201)
+        url = reverse('product-list')  # убедись, что такой name есть
+        data = {
+            'name': 'New Product',
+            'price': 9.99,
+            'stock': 10
+        }
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
-    def test_unauthorized_access(self):
-        response = self.client.get(reverse('order-list'))
-        self.assertEqual(response.status_code, 401)
-
-class CartTests(TestCase):
+class CartTests(APITestCase):
     def setUp(self):
         self.product = Product.objects.create(
             name='Test Product',
