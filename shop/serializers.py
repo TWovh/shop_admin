@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import Product, Category, Order, OrderItem
+from rest_framework.reverse import reverse
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -9,6 +10,22 @@ class CategorySerializer(serializers.ModelSerializer):
 
 
 class ProductSerializer(serializers.ModelSerializer):
+    url = serializers.SerializerMethodField()
+    category = serializers.StringRelatedField()
+
+    class Meta:
+        model = Product
+        fields = [
+            'id', 'name', 'slug', 'category',
+            'image', 'description', 'price',
+            'available', 'created', 'updated',
+            'url',
+        ]
+
+    def get_url(self, obj):
+        request = self.context.get('request')
+        return request.build_absolute_uri(obj.get_absolute_url())
+
     def validate_price(self, value):
         if value <= 0:
             raise serializers.ValidationError("Цена должна быть положительной.")
@@ -18,14 +35,6 @@ class ProductSerializer(serializers.ModelSerializer):
         if not data['available'] and 'price' in data:
             raise serializers.ValidationError("Нельзя менять цену недоступного товара")
         return data
-
-    category = serializers.StringRelatedField()
-
-    class Meta:
-        model = Product
-        fields = ['id', 'name', 'slug', 'category',
-                  'image', 'description', 'price',
-                  'available', 'created', 'updated']
 
 
 class OrderItemSerializer(serializers.ModelSerializer):

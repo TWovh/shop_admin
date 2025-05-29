@@ -13,7 +13,7 @@ from .views import (
 urlpatterns = [
     path('', index, name='index'),
     path('products/', ProductListView.as_view(), name='product-list'),
-    path('products/<int:pk>/', ProductDetailView.as_view(), name='product-detail'),
+    path('products/<int:id>/<slug:slug>/', ProductDetailView.as_view(), name='product_detail'),
     path('categories/', CategoryListView.as_view(), name='category-list'),
     path('categories/<int:pk>/', CategoryDetailView.as_view(), name='category-detail'),
     path('cart/add/<int:product_id>/', add_to_cart, name='add-to-cart'),

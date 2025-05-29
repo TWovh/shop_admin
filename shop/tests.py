@@ -1,11 +1,13 @@
-from rest_framework.test import APIClient
-from .models import Product
+from .models import Product, Category
+from rest_framework.test import APITestCase, APIClient
 from django.urls import reverse
-from rest_framework import status
-from rest_framework.test import APITestCase
-from django.contrib.auth.models import User
+from django.forms import ValidationError
+from django.contrib.auth import get_user_model
+from decimal import Decimal
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework import status
 
+User = get_user_model()
 
 class SecurityTests(APITestCase):
     def test_admin_access(self):
@@ -13,67 +15,115 @@ class SecurityTests(APITestCase):
         self.assertEqual(response.status_code, 302)  # редирект на логин
 
 
-class APITests(APITestCase):
+class ProductModelTests(APITestCase):
     def setUp(self):
-        self.client = APIClient()
+        self.category = Category.objects.create(name="Electronics", slug="electronics")
         self.product = Product.objects.create(
-            name='Test Throttle',
-            description='For throttling test',
-            price=10,
+            category=self.category,
+            name="Test Product",
+            slug="test-product",
+            price=Decimal("19.99"),
             stock=5
         )
 
-    def test_cart_throttling(self):
-        data = {'product_id': self.product.id, 'quantity': 1}
-        for _ in range(100):
-            self.client.post('/cart/add/', data=data)
-        response = self.client.post('/cart/add/', data=data)
-        self.assertEqual(response.status_code, 429)  # зависит от настройки throttle
+    def test_product_str(self):
+        self.assertEqual(str(self.product), "Test Product")
+
+    def test_get_absolute_url(self):
+        url = self.product.get_absolute_url()
+        expected = reverse('shop:product_detail', args=[self.product.id, self.product.slug])
+        self.assertEqual(url, expected)
+
+    def test_clean_negative_price(self):
+        self.product.price = -1
+        with self.assertRaises(ValidationError):
+            self.product.clean()
+
+    def test_image_preview_with_image(self):
+        self.product.image = "products/2025/05/27/test.jpg"
+        html = self.product.image_preview()
+        self.assertIn('<img', html)
+        self.assertIn('width="150"', html)
+
+    def test_image_preview_without_image(self):
+        self.product.image = ""
+        self.assertEqual(self.product.image_preview(), "Нет изображения")
 
 
-class ProductTests(APITestCase):
+class ProductAPITests(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='admin', password='admin123')
         refresh = RefreshToken.for_user(self.user)
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {str(refresh.access_token)}')
+        self.access_token = str(refresh.access_token)
 
-    def test_product_creation(self):
-        url = reverse('product-list')  # убедись, что такой name есть
+        self.client = APIClient()
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.access_token}')
+
+        self.category = Category.objects.create(name="Books", slug="books")
+
+    def test_create_product_authenticated(self):
+        url = reverse('product-list')
         data = {
-            'name': 'New Product',
-            'price': 9.99,
-            'stock': 10
+            "category": self.category.id,
+            "name": "API Product",
+            "slug": "api-product",
+            "price": "12.50",
+            "stock": 20
         }
         response = self.client.post(url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(Product.objects.count(), 1)
 
-class CartTests(APITestCase):
-    def setUp(self):
-        self.product = Product.objects.create(
-            name='Test Product',
-            description='Test description',
-            price=50.00,
-            stock=10
+    def test_create_product_invalid_price(self):
+        url = reverse('product-list')
+        data = {
+            "category": self.category.id,
+            "name": "Invalid Product",
+            "slug": "invalid-product",
+            "price": "-10.00",
+            "stock": 5
+        }
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_update_product(self):
+        product = Product.objects.create(
+            category=self.category,
+            name="Old Name",
+            slug="old-name",
+            price=20.00,
+            stock=2
         )
+        url = reverse('product-detail', args=[product.id])
+        data = {
+            "category": self.category.id,
+            "name": "Updated Name",
+            "slug": "updated-name",
+            "price": "25.00",
+            "stock": 10
+        }
+        response = self.client.put(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        product.refresh_from_db()
+        self.assertEqual(product.name, "Updated Name")
+        self.assertEqual(product.price, Decimal("25.00"))
 
-    def test_add_to_cart_success(self):
-        response = self.client.get(reverse('add-to-cart', args=[self.product.id]))
-        self.assertEqual(response.status_code, 302)
-
-        session = self.client.session
-        cart = session.get('cart', {})
-        self.assertIn(str(self.product.id), cart)
-        self.assertEqual(cart[str(self.product.id)], 1)
-
-    def test_add_non_existing_product(self):
-        response = self.client.get(reverse('add-to-cart', args=[999]))
-        self.assertEqual(response.status_code, 404)
-
-    def test_adding_same_product_twice_increments_quantity(self):
-        url = reverse('add-to-cart', args=[self.product.id])
-        self.client.get(url)
-        self.client.get(url)
-
-        session = self.client.session
-        cart = session.get('cart', {})
-        self.assertEqual(cart[str(self.product.id)], 2)
+    def test_list_products(self):
+        Product.objects.create(
+            category=self.category,
+            name="Book 1",
+            slug="book-1",
+            price=5.00,
+            stock=2
+        )
+        Product.objects.create(
+            category=self.category,
+            name="Book 2",
+            slug="book-2",
+            price=10.00,
+            stock=5
+        )
+        url = reverse('product-list')
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 2)

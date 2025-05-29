@@ -23,7 +23,7 @@ urlpatterns = [
 
     # Auth views
     path('auth/', include('django.contrib.auth.urls')),
-    path('shop/', include('shop.urls_views')),
+    path('shop/', include(('shop.urls_views', 'shop'), namespace='shop')),
 ]
 
 if settings.DEBUG:
