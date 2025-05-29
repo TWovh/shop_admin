@@ -1,4 +1,3 @@
-from .models import Product, Category
 from rest_framework.test import APITestCase, APIClient
 from django.urls import reverse
 from django.forms import ValidationError
@@ -6,6 +5,8 @@ from django.contrib.auth import get_user_model
 from decimal import Decimal
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework import status
+from django.test import TestCase
+from shop.models import Product, Category
 
 User = get_user_model()
 
@@ -52,7 +53,9 @@ class ProductModelTests(APITestCase):
 
 class ProductAPITests(APITestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username='admin', password='admin123')
+        self.user = User.objects.create_user(username='admin',
+                                             email='admin@example.com',
+                                             password='admin123')
         refresh = RefreshToken.for_user(self.user)
         self.access_token = str(refresh.access_token)
 
@@ -127,3 +130,38 @@ class ProductAPITests(APITestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 2)
+
+class ProductModelTests(TestCase):
+    def setUp(self):
+        self.category = Category.objects.create(name='Books', slug='books')
+        self.product = Product.objects.create(
+            name='Test Book',
+            slug='test-book',
+            category=self.category,
+            price=15.99,
+            stock=3,
+            available=True
+        )
+
+    def test_get_absolute_url(self):
+        url = self.product.get_absolute_url()
+        self.assertIn(str(self.product.slug), url)
+
+
+class ProductAPITestGet(APITestCase):
+    def setUp(self):
+        self.category = Category.objects.create(name='Tech', slug='tech')
+        self.product = Product.objects.create(
+            name='Laptop',
+            slug='laptop',
+            category=self.category,
+            price=999.99,
+            stock=10,
+            available=True
+        )
+
+    def test_get_product_detail(self):
+        url = reverse('shop:product-detail', args=[self.product.id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['name'], 'Laptop')
