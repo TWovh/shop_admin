@@ -306,6 +306,16 @@ class Order(models.Model):
     def __str__(self):
         return f"Заказ #{self.id} ({self.get_status_display()})"
 
+    payment_status = models.CharField(
+        max_length=20,
+        choices=[
+            ('unpaid', 'Не оплачен'),
+            ('paid', 'Оплачен'),
+        ],
+        default='unpaid',
+        verbose_name='Статус оплаты'
+    )
+
 class OrderItem(models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='order_items')
     product = models.ForeignKey('Product', on_delete=models.PROTECT)
@@ -320,6 +330,56 @@ class OrderItem(models.Model):
         return self.price * self.quantity
 
 
+class PaymentSettings(models.Model):
+    PAYMENT_CHOICES = [
+        ('stripe', 'Stripe'),
+        ('paypal', 'PayPal'),
+        ('yookassa', 'YooKassa'),
+    ]
+
+    payment_system = models.CharField(
+        max_length=20,
+        choices=PAYMENT_CHOICES,
+        default='stripe',
+        verbose_name='Платежная система'
+    )
+    is_active = models.BooleanField(default=True, verbose_name='Активна')
+    api_key = models.CharField(max_length=255, verbose_name='API ключ')
+    secret_key = models.CharField(max_length=255, verbose_name='Секретный ключ')
+    webhook_secret = models.CharField(max_length=255, blank=True, null=True, verbose_name='Секрет вебхука')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Настройка платежей'
+        verbose_name_plural = 'Настройки платежей'
+
+    def __str__(self):
+        return f"{self.get_payment_system_display()} ({'активна' if self.is_active else 'неактивна'})"
 
 
+class Payment(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Ожидает оплаты'),
+        ('paid', 'Оплачено'),
+        ('failed', 'Ошибка оплаты'),
+        ('refunded', 'Возврат'),
+    ]
 
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='payments')
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    external_id = models.CharField(max_length=255, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    raw_response = models.JSONField(blank=True, null=True)
+
+    class Meta:
+        verbose_name = 'Платеж'
+        verbose_name_plural = 'Платежи'
+        indexes = [
+            models.Index(fields=['external_id', 'status']),
+        ]
+
+    def __str__(self):
+        return f"Платеж #{self.id} для заказа {self.order.id}"

@@ -8,10 +8,8 @@ from datetime import timedelta
 from django.core.paginator import Paginator
 from django.http import Http404
 from django.template.response import TemplateResponse
-from django.contrib.auth.models import Group, AbstractUser
 from django.contrib.auth.admin import UserAdmin, GroupAdmin
 from django.contrib.admin.forms import AdminAuthenticationForm
-from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.contrib.admin.models import LogEntry, CHANGE, ADDITION
 from django.contrib.contenttypes.models import ContentType
@@ -19,6 +17,10 @@ import json
 from django.http import HttpRequest, HttpResponse
 from .types import AuthenticatedRequest, AuthRequest
 from .models import User
+from .views_payments import Payment, PaymentSettings
+
+
+
 
 class AdminDashboard(admin.AdminSite):
     index_template = 'admin/dashboard.html'
@@ -437,3 +439,21 @@ class LogEntryAdmin(admin.ModelAdmin):
     search_fields = ['user__email', 'object_repr', 'change_message']
     readonly_fields = list_display
     date_hierarchy = 'action_time'
+
+
+@admin.register(PaymentSettings, site=admin_site)
+class PaymentSettingsAdmin(admin.ModelAdmin):
+    list_display = ('payment_system', 'is_active', 'created_at')
+    list_editable = ('is_active',)
+    fields = ('payment_system', 'is_active', 'api_key', 'secret_key', 'webhook_secret')
+
+
+@admin.register(Payment, site=admin_site)
+class PaymentAdmin(admin.ModelAdmin):
+    list_display = ('id', 'order', 'amount', 'status', 'created_at')
+    list_filter = ('status', 'created_at')
+    search_fields = ('order__id', 'external_id')
+    readonly_fields = ('created_at', 'updated_at', 'raw_response')
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.role == 'ADMIN'
