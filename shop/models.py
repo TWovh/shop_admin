@@ -8,6 +8,7 @@ from django.utils import timezone
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.utils.translation import gettext_lazy as _
 from django.contrib.auth.password_validation import validate_password
+from django_cryptography.fields import encrypt
 
 
 class UserManager(BaseUserManager):
@@ -344,9 +345,14 @@ class PaymentSettings(models.Model):
         verbose_name='Платежная система'
     )
     is_active = models.BooleanField(default=True, verbose_name='Активна')
-    api_key = models.CharField(max_length=255, verbose_name='API ключ')
-    secret_key = models.CharField(max_length=255, verbose_name='Секретный ключ')
-    webhook_secret = models.CharField(max_length=255, blank=True, null=True, verbose_name='Секрет вебхука')
+    api_key = encrypt(models.CharField(max_length=255, verbose_name='API ключ'))
+    secret_key = encrypt(models.CharField(max_length=255, verbose_name='Секретный ключ'))
+    webhook_secret = encrypt(models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        verbose_name='Секрет вебхука'
+    ))
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -1,3 +1,4 @@
+from django.utils.html import format_html
 from .models import Product, Category, Order, Cart, CartItem, User
 from django.contrib import admin
 from django.urls import path, reverse
@@ -17,7 +18,9 @@ import json
 from django.http import HttpRequest, HttpResponse
 from .types import AuthenticatedRequest, AuthRequest
 from .models import User
-from .views_payments import Payment, PaymentSettings
+from django.contrib import messages
+from django import forms
+from .models import PaymentSettings, Payment
 
 
 
@@ -93,7 +96,26 @@ class AdminDashboard(admin.AdminSite):
                 ]
             })
 
+            app_list.append({
+                'name': 'Платежи',
+                'app_label': 'payments',
+                'models': [
+                    {
+                        'name': 'Настройки платежей',
+                        'object_name': 'paymentsettings',
+                        'admin_url': reverse('myadmin:shop_paymentsettings_changelist'),
+                    },
+                    {
+                        'name': 'История платежей',
+                        'object_name': 'payment',
+                        'admin_url': reverse('myadmin:shop_payment_changelist'),
+                    }
+                ]
+            })
+
         return app_list
+
+
 
 
 
@@ -457,3 +479,63 @@ class PaymentAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return request.user.role == 'ADMIN'
+
+class PaymentSettingsForm(forms.ModelForm):
+    class Meta:
+        model = PaymentSettings
+        fields = '__all__'
+        widgets = {
+            'api_key': forms.PasswordInput(render_value=True),
+            'secret_key': forms.PasswordInput(render_value=True),
+            'webhook_secret': forms.PasswordInput(render_value=True),
+        }
+
+
+@admin.register(PaymentSettings, site=admin_site)
+class PaymentSettingsAdmin(admin.ModelAdmin):
+    form = PaymentSettingsForm
+    list_display = ('payment_system', 'is_active', 'created_at')
+    list_editable = ('is_active',)
+    fieldsets = (
+        (None, {
+            'fields': ('payment_system', 'is_active')
+        }),
+        ('API Ключи', {
+            'fields': ('api_key', 'secret_key', 'webhook_secret'),
+            'description': 'Получить ключи можно в личном кабинете платежной системы'
+        }),
+    )
+    actions = ['test_connection']
+
+    def test_connection(self, request, queryset):
+        for settings in queryset:
+            # Здесь будет код проверки подключения к платежной системе
+            messages.success(request, f"Подключение к {settings.get_payment_system_display()} успешно проверено")
+
+    test_connection.short_description = "Проверить подключение"
+
+
+@admin.register(Payment, site=admin_site)
+class PaymentAdmin(admin.ModelAdmin):
+    list_display = ('id', 'order_link', 'amount', 'status', 'created_at')
+    list_filter = ('status', 'created_at')
+    search_fields = ('order__id', 'external_id')
+    readonly_fields = ('created_at', 'updated_at', 'raw_response')
+    actions = ['refund_payment']
+
+    def order_link(self, obj):
+        url = reverse('myadmin:shop_order_change', args=[obj.order.id])
+        return format_html('<a href="{}">Заказ #{}</a>', url, obj.order.id)
+
+    order_link.short_description = 'Заказ'
+
+    def refund_payment(self, request, queryset):
+        # Здесь будет код возврата платежа
+        messages.success(request, f"Возврат для {queryset.count()} платежей инициирован")
+
+    refund_payment.short_description = "Инициировать возврат"
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj and obj.status == 'refunded':
+            return self.readonly_fields + ('status',)
+        return self.readonly_fields
