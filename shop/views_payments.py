@@ -5,9 +5,11 @@ from django.conf import settings
 from .models import PaymentSettings, Payment, Order
 import stripe
 import requests
+from .permissions import IsAdminOrUser
 
 
 class CreatePaymentView(APIView):
+    permission_classes = [IsAdminOrUser]
     def post(self, request, order_id):
         try:
             order = Order.objects.get(id=order_id, user=request.user)
@@ -52,7 +54,7 @@ class CreatePaymentView(APIView):
 
                 return Response({'payment_url': session.url}, status=status.HTTP_201_CREATED)
 
-            # Добавьте обработку других платежных систем здесь
+            # Сюда вставить другие платежки
 
         except Order.DoesNotExist:
             return Response({'error': 'Заказ не найден'}, status=status.HTTP_404_NOT_FOUND)

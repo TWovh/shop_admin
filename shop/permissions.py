@@ -40,8 +40,14 @@ class IsStaff(CustomPermission):
     """Для персонала и администраторов"""
     allowed_roles = ['ADMIN', 'STAFF']
 
+class IsUser(CustomPermission):
+    allowed_roles = ['USER']
 
-class IsOwnerOrAdmin(permissions.BasePermission):
+class IsAdminOrUser(CustomPermission):
+    allowed_roles = ['ADMIN', 'USER']
+
+
+class IsOwnerOrAdmin(CustomPermission):
 
     def has_object_permission(self, request, view, obj):
         # Админам разрешаем всё

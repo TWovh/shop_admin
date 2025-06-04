@@ -528,14 +528,3 @@ class PaymentAdmin(admin.ModelAdmin):
         return format_html('<a href="{}">Заказ #{}</a>', url, obj.order.id)
 
     order_link.short_description = 'Заказ'
-
-    def refund_payment(self, request, queryset):
-        # Здесь будет код возврата платежа
-        messages.success(request, f"Возврат для {queryset.count()} платежей инициирован")
-
-    refund_payment.short_description = "Инициировать возврат"
-
-    def get_readonly_fields(self, request, obj=None):
-        if obj and obj.status == 'refunded':
-            return self.readonly_fields + ('status',)
-        return self.readonly_fields
