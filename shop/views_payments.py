@@ -1,3 +1,5 @@
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -62,34 +64,42 @@ class CreatePaymentView(APIView):
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class PaymentWebhookView(APIView):
-    def post(self, request):
+@method_decorator(csrf_exempt, name='dispatch')
+class StripeWebhookView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request, *args, **kwargs):
         payload = request.body
         sig_header = request.META.get('HTTP_STRIPE_SIGNATURE', '')
-        payment_settings = PaymentSettings.objects.filter(payment_system='stripe', is_active=True).first()
+        webhook_secret = settings.STRIPE_WEBHOOK_SECRET  #
 
         try:
             event = stripe.Webhook.construct_event(
-                payload, sig_header, payment_settings.webhook_secret
+                payload, sig_header, webhook_secret
             )
+        except ValueError as e:
+            return Response({'error': 'Invalid payload'}, status=400)
+        except stripe.error.SignatureVerificationError as e:
+            return Response({'error': 'Invalid signature'}, status=400)
 
-            if event['type'] == 'checkout.session.completed':
-                session = event['data']['object']
-                payment = Payment.objects.get(external_id=session['id'])
+        # Обработка успешной оплаты
+        if event['type'] == 'checkout.session.completed':
+            session = event['data']['object']
+            order_id = session['metadata'].get('order_id')
+            session_id = session['id']
+
+            try:
+                payment = Payment.objects.get(external_id=session_id)
                 payment.status = 'paid'
-                payment.raw_response = event
                 payment.save()
 
-                # Обновление статуса заказа
+                # можно обновить заказ, если нужно
                 order = payment.order
-                order.status = 'processing'  # Меняем статус на "В обработке"
+                order.status = 'paid'  # если у тебя есть статус
                 order.save()
 
-            return Response(status=status.HTTP_200_OK)
+            except Payment.DoesNotExist:
+                return Response({'error': 'Платёж не найден'}, status=404)
 
-        except ValueError:
-            return Response(status=status.HTTP_400_BAD_REQUEST)
-        except stripe.error.SignatureVerificationError:
-            return Response(status=status.HTTP_400_BAD_REQUEST)
-        except Payment.DoesNotExist:
-            return Response(status=status.HTTP_404_NOT_FOUND)
+        return Response({'status': 'success'}, status=200)

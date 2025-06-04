@@ -8,6 +8,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv()
 SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = True
+STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET')
 
 """CORS_ALLOWED_ORIGINS = ['домен']
 CSRF_TRUSTED_ORIGINS = ['домен']"""
@@ -17,9 +18,12 @@ AUTH_USER_MODEL = 'shop.User'
 SESSION_COOKIE_SECURE = False
 CSRF_COOKIE_SECURE = False
 SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 SECURE_SSL_REDIRECT = False
 CSRF_COOKIE_SAMESITE = 'Lax'
+X_FRAME_OPTIONS = 'DENY'
+
 
 LOGIN_URL = '/admin/login/'
 LOGIN_REDIRECT_URL = '/admin/'
@@ -140,6 +144,8 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media/')
 
 
+
+
 LANGUAGE_CODE = "en-us"
 
 TIME_ZONE = "UTC"
@@ -159,3 +165,4 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Директория для collectstatic
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
