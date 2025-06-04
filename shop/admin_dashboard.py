@@ -521,7 +521,6 @@ class PaymentAdmin(admin.ModelAdmin):
     list_filter = ('status', 'created_at')
     search_fields = ('order__id', 'external_id')
     readonly_fields = ('created_at', 'updated_at', 'raw_response')
-    actions = ['refund_payment']
 
     def order_link(self, obj):
         url = reverse('myadmin:shop_order_change', args=[obj.order.id])

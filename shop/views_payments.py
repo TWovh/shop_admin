@@ -8,6 +8,9 @@ from .models import PaymentSettings, Payment, Order
 import stripe
 import requests
 from .permissions import IsAdminOrUser
+from django.core.mail import send_mail
+from django.template.loader import render_to_string
+from decimal import Decimal
 
 
 class CreatePaymentView(APIView):
@@ -15,6 +18,8 @@ class CreatePaymentView(APIView):
     def post(self, request, order_id):
         try:
             order = Order.objects.get(id=order_id, user=request.user)
+            if order.status != 'pending':
+                return Response({'error': 'Заказ не может быть оплачен'}, status=status.HTTP_400_BAD_REQUEST)
 
             # Проверка существующего платежа
             if Payment.objects.filter(order=order, status='paid').exists():
@@ -36,7 +41,7 @@ class CreatePaymentView(APIView):
                             'product_data': {
                                 'name': f'Заказ #{order.id}',
                             },
-                            'unit_amount': int(order.total_price * 100),
+                            'unit_amount': int(Decimal(order.total_price) * 100),
                         },
                         'quantity': 1,
                     }],
@@ -51,7 +56,8 @@ class CreatePaymentView(APIView):
                     order=order,
                     amount=order.total_price,
                     external_id=session.id,
-                    raw_response=session
+                    raw_response=session,
+                    status='pending'
                 )
 
                 return Response({'payment_url': session.url}, status=status.HTTP_201_CREATED)
@@ -93,13 +99,55 @@ class StripeWebhookView(APIView):
                 payment = Payment.objects.get(external_id=session_id)
                 payment.status = 'paid'
                 payment.save()
+                try:
+                    self.send_payment_success_email(payment)
+                except Exception as e:
+                    # логируй ошибку или отправь в sentry
+                    pass
 
                 # можно обновить заказ, если нужно
                 order = payment.order
                 order.status = 'paid'  # если у тебя есть статус
                 order.save()
 
+
             except Payment.DoesNotExist:
                 return Response({'error': 'Платёж не найден'}, status=404)
 
+
         return Response({'status': 'success'}, status=200)
+
+    def send_payment_success_email(self, payment):
+        subject = f"Заказ #{payment.order.id} успешно оплачен"
+
+        # Инвойс
+        context = {
+            'order': payment.order,
+            'payment': payment,
+            'site_url': settings.SITE_URL
+        }
+
+        # HTML версия письма
+        html_message = render_to_string('email/payment_success.html', context)
+
+        # Текстовая версия письма
+        plain_message = render_to_string('email/payment_success.txt', context)
+
+        # Отправка покупателю
+        send_mail(
+            subject,
+            plain_message,
+            settings.DEFAULT_FROM_EMAIL,
+            [payment.order.email],
+            html_message=html_message
+        )
+
+        # Отправка администратору
+        admin_subject = f"Новый оплаченный заказ #{payment.order.id}"
+        send_mail(
+            admin_subject,
+            plain_message,
+            settings.DEFAULT_FROM_EMAIL,
+            [settings.ADMIN_EMAIL],
+            html_message=html_message
+        )

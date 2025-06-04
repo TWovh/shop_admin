@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Заказ оплачен</title>
+</head>
+<body>
+    <h2>Ваш заказ успешно оплачен!</h2>
+    <p>Номер заказа: <strong>#{{ order.id }}</strong></p>
+    <p>Сумма оплаты: <strong>{{ payment.amount }} UAH</strong></p>
+    <p>Дата оплаты: <strong>{{ payment.created_at|date:"d.m.Y H:i" }}</strong></p>
+
+    <h3>Детали заказа:</h3>
+    <ul>
+        {% for item in order.order_items.all %}
+        <li>{{ item.product.name }} - {{ item.quantity }} шт. x {{ item.price }} ₽</li>
+        {% endfor %}
+    </ul>
+
+    <p>Сумма заказа: {{ order.total_price }} UAH</p>
+
+    <p>Вы можете отслеживать статус заказа в <a href="{{ site_url }}/account/orders/">личном кабинете</a>.</p>
+
+    <p>С уважением,<br>
+    Команда {{ site_name }}</p>
+</body>
+</html>
