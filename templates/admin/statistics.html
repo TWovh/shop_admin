@@ -35,7 +35,6 @@
         </form>
     </div>
 
-    <!-- Основные метрики -->
     <div class="metrics-grid">
         <div class="metric-card">
             <div class="metric-value">{{ total_sales|intcomma }} ₽</div>
@@ -53,7 +52,6 @@
         </div>
     </div>
 
-    <!-- Таблица заказов -->
     <div class="orders-section">
         <h2>История заказов</h2>
         <div class="table-responsive">
@@ -96,6 +94,27 @@
                     </tr>
                     {% endfor %}
                 </tbody>
+            </table>
+        </div>
+        <div class="module">
+            <h2>Статистика платежей</h2>
+            <table>
+                <tr>
+                    <th>Статус</th>
+                    <th>Количество</th>
+                    <th>Сумма</th>
+                </tr>
+                {% for stat in payment_stats %}
+                <tr>
+                    <td>{{ stat.get_status_display }}</td>
+                    <td>{{ stat.count }}</td>
+                    <td>{{ stat.total }} ₽</td>
+                </tr>
+                {% endfor %}
+                <tr style="font-weight:bold">
+                    <td>Всего</td>
+                    <td colspan="2">{{ payment_total }} ₽</td>
+                </tr>
             </table>
         </div>
 

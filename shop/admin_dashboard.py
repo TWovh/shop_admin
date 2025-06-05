@@ -295,6 +295,13 @@ class AdminDashboard(admin.AdminSite):
                 .order_by('-total_sales')
             )
 
+            payment_stats = Payment.objects.filter(
+                created__gte=timezone.now() - timedelta(days=30)
+            ).values('status').annotate(
+                count=Count('id'),
+                total=Sum('amount')
+            )
+
             context = {
                 'total_sales': orders.aggregate(total=Sum('total_price'))['total'] or 0,
                 'orders_count': orders.count(),
@@ -302,6 +309,8 @@ class AdminDashboard(admin.AdminSite):
                 'categories_stats': categories_stats,
                 **self.each_context(request),
                 'title': 'Статистика продаж',
+                'payment_stats': list(payment_stats),
+                'payment_total': Payment.objects.aggregate(total=Sum('amount'))['total'] or 0,
             }
             return TemplateResponse(request, 'admin/statistics.html', context)
         except Exception as e:
@@ -342,11 +351,34 @@ class DashboardProductAdmin(RoleBasedAdmin):
 
 @admin.register(Order, site=admin_site)
 class DashboardOrderAdmin(admin.ModelAdmin):
-    list_display = ('id', 'user', 'total_price', 'status', 'created')
-    list_filter = ('status', 'created')
+    list_display = ('id', 'user', 'total_price', 'status', 'payment_status_badge', 'created')
     search_fields = ('user__username', 'id')
+    readonly_fields = ('payment_status_badge', 'payment_actions')
 
+    def payment_status_badge(self, obj):
+        colors = {
+            'unpaid': 'gray',
+            'paid': 'green',
+            'pending': 'orange',
+            'refunded': 'blue'
+        }
+        return format_html(
+            '<span style="background:{}; color:white; padding:2px 6px; border-radius:4px">{}</span>',
+            colors.get(obj.payment_status, 'gray'),
+            obj.get_payment_status_display()
+        )
 
+    payment_status_badge.short_description = 'Статус оплаты'
+
+    def payment_actions(self, obj):
+        if obj.payment_status == 'unpaid':
+            return format_html(
+                '<a href="{}" class="button">Создать платеж</a>',
+                reverse('create-payment', args=[obj.id])
+            )
+        return '-'
+
+    payment_actions.short_description = 'Действия'
 
 @admin.register(Category, site=admin_site)
 class DashboardCategoryAdmin(admin.ModelAdmin):
@@ -463,32 +495,50 @@ class LogEntryAdmin(admin.ModelAdmin):
     date_hierarchy = 'action_time'
 
 
-@admin.register(PaymentSettings, site=admin_site)
-class PaymentSettingsAdmin(admin.ModelAdmin):
-    list_display = ('payment_system', 'is_active', 'created_at')
-    list_editable = ('is_active',)
-    fields = ('payment_system', 'is_active', 'api_key', 'secret_key', 'webhook_secret')
-
-
-@admin.register(Payment, site=admin_site)
-class PaymentAdmin(admin.ModelAdmin):
-    list_display = ('id', 'order', 'amount', 'status', 'created_at')
-    list_filter = ('status', 'created_at')
-    search_fields = ('order__id', 'external_id')
-    readonly_fields = ('created_at', 'updated_at', 'raw_response')
-
-    def has_delete_permission(self, request, obj=None):
-        return request.user.role == 'ADMIN'
-
 class PaymentSettingsForm(forms.ModelForm):
+    api_key = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(render_value=True),
+        help_text="Видим только при создании/изменении"
+    )
+    secret_key = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(render_value=True),
+        help_text="Видим только при создании/изменении"
+    )
+    webhook_secret = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(render_value=True),
+        help_text="Видим только при создании/изменении"
+    )
+
     class Meta:
         model = PaymentSettings
         fields = '__all__'
-        widgets = {
-            'api_key': forms.PasswordInput(render_value=True),
-            'secret_key': forms.PasswordInput(render_value=True),
-            'webhook_secret': forms.PasswordInput(render_value=True),
-        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance:
+            if self.instance.api_key:
+                self.fields['api_key'].initial = "********"
+            if self.instance.secret_key:
+                self.fields['secret_key'].initial = "********"
+            if self.instance.webhook_secret:
+                self.fields['webhook_secret'].initial = "********"
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+
+        if self.cleaned_data['api_key'] != "********":
+            instance.api_key = self.cleaned_data['api_key']
+        if self.cleaned_data['secret_key'] != "********":
+            instance.secret_key = self.cleaned_data['secret_key']
+        if self.cleaned_data['webhook_secret'] != "********":
+            instance.webhook_secret = self.cleaned_data['webhook_secret']
+
+        if commit:
+            instance.save()
+        return instance
 
 
 @admin.register(PaymentSettings, site=admin_site)
@@ -502,7 +552,7 @@ class PaymentSettingsAdmin(admin.ModelAdmin):
         }),
         ('API Ключи', {
             'fields': ('api_key', 'secret_key', 'webhook_secret'),
-            'description': 'Получить ключи можно в личном кабинете платежной системы'
+            'description': 'Получить ключи можно в личном кабинете платежной системы. Видны только при редактировании'
         }),
     )
     actions = ['test_connection']

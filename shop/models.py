@@ -1,3 +1,4 @@
+from django.core import signing
 from django.db import models, transaction
 from django.urls import reverse
 from django.db.models import Index, Sum
@@ -8,7 +9,6 @@ from django.utils import timezone
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.utils.translation import gettext_lazy as _
 from django.contrib.auth.password_validation import validate_password
-from django_cryptography.fields import encrypt
 
 
 class UserManager(BaseUserManager):
@@ -345,20 +345,66 @@ class PaymentSettings(models.Model):
         verbose_name='Платежная система'
     )
     is_active = models.BooleanField(default=True, verbose_name='Активна')
-    api_key = encrypt(models.CharField(max_length=255, verbose_name='API ключ'))
-    secret_key = encrypt(models.CharField(max_length=255, verbose_name='Секретный ключ'))
-    webhook_secret = encrypt(models.CharField(
-        max_length=255,
-        blank=True,
-        null=True,
-        verbose_name='Секрет вебхука'
-    ))
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    _api_key = models.CharField(max_length=255, verbose_name='API ключ (зашифрован)', blank=True)
+    _secret_key = models.CharField(max_length=255, verbose_name='Секретный ключ (зашифрован)', blank=True)
+    _webhook_secret = models.CharField(max_length=255, blank=True, null=True, verbose_name='Секрет вебхука (зашифрован)')
+
+    @property
+    def api_key(self):
+        return signing.loads(self._api_key) if self._api_key else ""
+
+    @api_key.setter
+    def api_key(self, value):
+        self._api_key = signing.dumps(value)
+
+    @property
+    def secret_key(self):
+        return signing.loads(self._secret_key) if self._secret_key else ""
+
+    @secret_key.setter
+    def secret_key(self, value):
+        self._secret_key = signing.dumps(value)
+
+    @property
+    def webhook_secret(self):
+        return signing.loads(self._webhook_secret) if self._webhook_secret else ""
+
+    @webhook_secret.setter
+    def webhook_secret(self, value):
+        self._webhook_secret = signing.dumps(value)
+
+    # Сохраняем оригинальные значения в памяти для админки
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.__original_api_key = self.api_key
+        self.__original_secret_key = self.secret_key
+        self.__original_webhook_secret = self.webhook_secret
+
+    def save(self, *args, **kwargs):
+        # Шифруем только если значение изменилось
+        if self.api_key != self.__original_api_key:
+            self._api_key = signing.dumps(self.api_key)
+        if self.secret_key != self.__original_secret_key:
+            self._secret_key = signing.dumps(self.secret_key)
+        if self.webhook_secret != self.__original_webhook_secret:
+            self._webhook_secret = signing.dumps(self.webhook_secret)
+
+        super().save(*args, **kwargs)
+        self.__original_api_key = self.api_key
+        self.__original_secret_key = self.secret_key
+        self.__original_webhook_secret = self.webhook_secret
 
     class Meta:
         verbose_name = 'Настройка платежей'
         verbose_name_plural = 'Настройки платежей'
+
+    def clean(self):
+        if not self.api_key:
+            raise ValidationError("API ключ не может быть пустым.")
+        if not self.secret_key:
+            raise ValidationError("Секретный ключ не может быть пустым.")
+        if self.payment_system == 'stripe' and not self.webhook_secret:
+            raise ValidationError("Webhook секрет обязателен для Stripe.")
 
     def __str__(self):
         return f"{self.get_payment_system_display()} ({'активна' if self.is_active else 'неактивна'})"
@@ -371,6 +417,14 @@ class Payment(models.Model):
         ('failed', 'Ошибка оплаты'),
         ('refunded', 'Возврат'),
     ]
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='payments',
+        verbose_name='Пользователь'
+    )
 
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='payments')
     amount = models.DecimalField(max_digits=10, decimal_places=2)
@@ -389,3 +443,10 @@ class Payment(models.Model):
 
     def __str__(self):
         return f"Платеж #{self.id} для заказа {self.order.id}"
+
+
+
+    def save(self, *args, **kwargs):
+        if not self.user and self.order and self.order.user:
+            self.user = self.order.user
+        super().save(*args, **kwargs)

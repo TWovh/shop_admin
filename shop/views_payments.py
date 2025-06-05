@@ -31,7 +31,7 @@ class CreatePaymentView(APIView):
 
             # Инициализация платежа в Stripe
             if payment_settings.payment_system == 'stripe':
-                stripe.api_key = payment_settings.secret_key
+                stripe.api_key = settings.STRIPE_SECRET_KEY
 
                 session = stripe.checkout.Session.create(
                     payment_method_types=['card'],
