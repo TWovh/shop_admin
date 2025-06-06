@@ -499,17 +499,20 @@ class PaymentSettingsForm(forms.ModelForm):
     api_key = forms.CharField(
         required=False,
         widget=forms.PasswordInput(render_value=True),
-        help_text="Видим только при создании/изменении"
+        label="API ключ",
+        help_text="Оставьте пустым, чтобы не изменять текущее значение"
     )
     secret_key = forms.CharField(
         required=False,
         widget=forms.PasswordInput(render_value=True),
-        help_text="Видим только при создании/изменении"
+        label="Секретный ключ",
+        help_text="Оставьте пустым, чтобы не изменять текущее значение"
     )
     webhook_secret = forms.CharField(
         required=False,
         widget=forms.PasswordInput(render_value=True),
-        help_text="Видим только при создании/изменении"
+        label="Секрет вебхука",
+        help_text="Оставьте пустым, чтобы не изменять текущее значение"
     )
 
     class Meta:
@@ -518,33 +521,32 @@ class PaymentSettingsForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if self.instance:
-            if self.instance.api_key:
-                self.fields['api_key'].initial = "********"
-            if self.instance.secret_key:
-                self.fields['secret_key'].initial = "********"
-            if self.instance.webhook_secret:
-                self.fields['webhook_secret'].initial = "********"
+        instance = kwargs.get('instance')
+        if instance:
+            if instance.api_key:
+                self.fields['api_key'].widget.attrs['placeholder'] = '**********'
+            if instance.secret_key:
+                self.fields['secret_key'].widget.attrs['placeholder'] = '**********'
+            if instance.webhook_secret:
+                self.fields['webhook_secret'].widget.attrs['placeholder'] = '**********'
 
     def save(self, commit=True):
         instance = super().save(commit=False)
 
-        if self.cleaned_data['api_key'] != "********":
+        if self.cleaned_data.get('api_key'):
             instance.api_key = self.cleaned_data['api_key']
-        if self.cleaned_data['secret_key'] != "********":
+        if self.cleaned_data.get('secret_key'):
             instance.secret_key = self.cleaned_data['secret_key']
-        if self.cleaned_data['webhook_secret'] != "********":
+        if self.cleaned_data.get('webhook_secret'):
             instance.webhook_secret = self.cleaned_data['webhook_secret']
 
         if commit:
             instance.save()
         return instance
 
-
 @admin.register(PaymentSettings, site=admin_site)
 class PaymentSettingsAdmin(admin.ModelAdmin):
-    form = PaymentSettingsForm
-    list_display = ('payment_system', 'is_active', 'created_at')
+    list_display = ('payment_system', 'is_active', 'get_created_at')
     list_editable = ('is_active',)
     fieldsets = (
         (None, {
@@ -555,14 +557,41 @@ class PaymentSettingsAdmin(admin.ModelAdmin):
             'description': 'Получить ключи можно в личном кабинете платежной системы. Видны только при редактировании'
         }),
     )
+
     actions = ['test_connection']
+
+    def get_created_at(self, obj):
+        return obj.created_at.strftime("%d.%m.%Y %H:%M")
+
+    get_created_at.admin_order_field = 'created_at'  # Разрешаем сортировку
+    get_created_at.short_description = 'Создан'
 
     def test_connection(self, request, queryset):
         for settings in queryset:
-            # Здесь будет код проверки подключения к платежной системе
-            messages.success(request, f"Подключение к {settings.get_payment_system_display()} успешно проверено")
-
-    test_connection.short_description = "Проверить подключение"
+            try:
+                # Простая проверка для Stripe
+                if settings.payment_system == 'stripe':
+                    import stripe
+                    stripe.api_key = settings.secret_key
+                    stripe.Balance.retrieve()  # Простой запрос
+                    self.message_user(
+                        request,
+                        f"Подключение к {settings.get_payment_system_display()} успешно!",
+                        messages.SUCCESS
+                    )
+                else:
+                    self.message_user(
+                        request,
+                        f"Проверка подключения для {settings.get_payment_system_display()} не реализована",
+                        messages.WARNING
+                    )
+            except Exception as e:
+                self.message_user(
+                    request,
+                    f"Ошибка подключения к {settings.get_payment_system_display()}: {str(e)}",
+                    messages.ERROR
+                )
+        test_connection.short_description = "Проверить подключение к платежной системе"
 
 
 @admin.register(Payment, site=admin_site)

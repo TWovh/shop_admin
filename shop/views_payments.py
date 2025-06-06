@@ -15,13 +15,14 @@ from decimal import Decimal
 
 class CreatePaymentView(APIView):
     permission_classes = [IsAdminOrUser]
+
     def post(self, request, order_id):
         try:
             order = Order.objects.get(id=order_id, user=request.user)
+
             if order.status != 'pending':
                 return Response({'error': 'Заказ не может быть оплачен'}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Проверка существующего платежа
             if Payment.objects.filter(order=order, status='paid').exists():
                 return Response({'error': 'Заказ уже оплачен'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -29,46 +30,48 @@ class CreatePaymentView(APIView):
             if not payment_settings:
                 return Response({'error': 'Платежная система не настроена'}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Инициализация платежа в Stripe
             if payment_settings.payment_system == 'stripe':
-                stripe.api_key = settings.STRIPE_SECRET_KEY
+                return self.create_stripe_payment(order, payment_settings)
 
-                session = stripe.checkout.Session.create(
-                    payment_method_types=['card'],
-                    line_items=[{
-                        'price_data': {
-                            'currency': 'rub',
-                            'product_data': {
-                                'name': f'Заказ #{order.id}',
-                            },
-                            'unit_amount': int(Decimal(order.total_price) * 100),
-                        },
-                        'quantity': 1,
-                    }],
-                    mode='payment',
-                    success_url=request.build_absolute_uri(f'/orders/{order.id}/success/'),
-                    cancel_url=request.build_absolute_uri(f'/orders/{order.id}/cancel/'),
-                    metadata={'order_id': order.id}
-                )
-
-                # Сохранение платежа
-                payment = Payment.objects.create(
-                    order=order,
-                    amount=order.total_price,
-                    external_id=session.id,
-                    raw_response=session,
-                    status='pending'
-                )
-
-                return Response({'payment_url': session.url}, status=status.HTTP_201_CREATED)
-
-            # Сюда вставить другие платежки
+            return Response({'error': 'Неизвестная платёжная система'}, status=status.HTTP_400_BAD_REQUEST)
 
         except Order.DoesNotExist:
             return Response({'error': 'Заказ не найден'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.exception("Ошибка при создании платежа")
+            return Response({'error': 'Внутренняя ошибка сервера'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    def create_stripe_payment(self, order, payment_settings):
+        stripe.api_key = payment_settings.secret_key  # используем зашифрованный ключ из модели
+
+        session = stripe.checkout.Session.create(
+            payment_method_types=['card'],
+            line_items=[{
+                'price_data': {
+                    'currency': 'uah',
+                    'product_data': {
+                        'name': f'Заказ #{order.id}',
+                    },
+                    'unit_amount': int(Decimal(order.total_price) * 100),
+                },
+                'quantity': 1,
+            }],
+            mode='payment',
+            success_url=f'{settings.SITE_URL}/orders/{order.id}/success/',
+            cancel_url=f'{settings.SITE_URL}/orders/{order.id}/cancel/',
+            metadata={'order_id': order.id}
+        )
+
+        payment = Payment.objects.create(
+            order=order,
+            amount=order.total_price,
+            external_id=session.id,
+            payment_system='stripe',
+            raw_response=session,
+            status='pending'
+        )
+
+        return Response({'payment_url': session.url}, status=status.HTTP_201_CREATED)
 
 @method_decorator(csrf_exempt, name='dispatch')
 class StripeWebhookView(APIView):

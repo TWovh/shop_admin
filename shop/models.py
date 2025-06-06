@@ -394,7 +394,10 @@ class PaymentSettings(models.Model):
         self.__original_secret_key = self.secret_key
         self.__original_webhook_secret = self.webhook_secret
 
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Дата создания')
+
     class Meta:
+        ordering = ['-created_at']
         verbose_name = 'Настройка платежей'
         verbose_name_plural = 'Настройки платежей'
 
