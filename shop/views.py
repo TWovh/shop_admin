@@ -199,7 +199,7 @@ def add_to_cart(request, product_id=None):
         item.save()
 
     messages.success(request, f"Товар {product.name} добавлен в корзину")
-    return redirect('product-list')
+    return redirect('shop:product-list')
 
 class UpdateCartItemView(APIView):
     permission_classes = [IsAuthenticated]
