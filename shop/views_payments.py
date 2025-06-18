@@ -6,12 +6,14 @@ from rest_framework import status
 from django.conf import settings
 from .models import PaymentSettings, Payment, Order
 import stripe
-import requests
 from .permissions import IsAdminOrUser
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from decimal import Decimal
+import logging
 
+
+logger = logging.getLogger(__name__)
 
 class CreatePaymentView(APIView):
     permission_classes = [IsAdminOrUser]
@@ -100,6 +102,9 @@ class StripeWebhookView(APIView):
 
             try:
                 payment = Payment.objects.get(external_id=session_id)
+                if str(payment.order.id) != str(order_id):
+                    return Response({'error': 'Несоответствие order_id'}, status=400)
+
                 payment.status = 'paid'
                 payment.save()
                 try:

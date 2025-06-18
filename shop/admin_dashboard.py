@@ -398,7 +398,7 @@ class CustomUserAdmin(UserAdmin):
 
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
-        form.base_fields['role'].role = 'role'  # Явное указание для IDE
+        form.base_fields['role'].required = True  # Пример дополнительной настройки
         return form
 
     fieldsets = (
@@ -419,10 +419,7 @@ class CustomUserAdmin(UserAdmin):
 
     ordering = ('email',)
 
-    def get_form(self, request, obj=None, **kwargs):
-        form = super().get_form(request, obj, **kwargs)
-        form.base_fields['role'].required = True  # Пример дополнительной настройки
-        return form
+
 
 
 
