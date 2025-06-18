@@ -11,7 +11,7 @@ from shop.views import index, register
 
 
 urlpatterns = [
-    path('', index, name='index'),
+    path('', include(('shop.urls_views', 'shop'), namespace='shop')),
     path('admin/', admin_site.urls),
     path('api/', include('shop.urls_api')),
 
@@ -23,7 +23,6 @@ urlpatterns = [
 
     # Auth views
     path('auth/', include('django.contrib.auth.urls')),
-    path('shop/', include(('shop.urls_views', 'shop'), namespace='shop')),
 ]
 
 if settings.DEBUG:

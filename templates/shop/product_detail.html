@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}{{ product.name }}{% endblock %}
+
+{% block content %}
+<h1>{{ product.name }}</h1>
+
+{% if product.image %}
+    <img src="{{ product.image.url }}" alt="{{ product.name }}" style="max-width: 300px;">
+{% endif %}
+
+<p><strong>Цена:</strong> {{ product.price }} {{ product.currency|default:"₴" }}</p>
+
+<p><strong>Описание:</strong></p>
+<p>{{ product.description|linebreaks }}</p>
+
+<p><strong>Категория:</strong> 
+  <a href="{% url 'shop:category-detail' product.category.id %}">{{ product.category.name }}</a>
+</p>
+
+<a href="{% url 'shop:add-to-cart' product.id %}" class="btn btn-primary">Добавить в корзину</a>
+
+<a href="{% url 'shop:product-list' %}">← Вернуться к списку товаров</a>
+{% endblock %}

@@ -180,13 +180,13 @@ class AdminDashboard(admin.AdminSite):
         )
 
     def redirect_to_api_products(self, request):
-        return redirect(reverse('api-products'))  # Проверить есть ли он юрлс
+        return redirect(reverse('api-product-list'))  # Проверить есть ли он юрлс
 
     def redirect_to_api_product_detail(self, request, pk):
         return redirect(reverse('api-product-detail', args=[pk]))
 
     def redirect_to_api_cart_add(self, request):
-        return redirect(reverse('api-cart-add'))
+        return redirect(reverse('api-cart'))
 
     def get_dashboard_stats(self):
 
@@ -238,12 +238,12 @@ class AdminDashboard(admin.AdminSite):
             'api_links': [
                 {
                     'name': 'Список товаров',
-                    'url': reverse('product-list'),
+                    'url': reverse('shop:product-list'),
                     'method': 'GET'
                 },
                 {
                     'name': 'Список категорий',
-                    'url': reverse('category-list'),
+                    'url': reverse('shop:category-list'),
                     'method': 'GET'
                 },
 

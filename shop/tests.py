@@ -97,7 +97,7 @@ class ProductAPITests(APITestCase):
             price=20.00,
             stock=2
         )
-        url = reverse('product-detail', args=[product.id])
+        url = reverse('shop:product-detail', args=[product.id, product.slug])
         data = {
             "category": self.category.id,
             "name": "Updated Name",

@@ -1,3 +1,5 @@
+from django.views.generic import ListView, DetailView
+
 from .models import Product
 from rest_framework import generics
 from .serializers import ProductSerializer, CategorySerializer
@@ -18,9 +20,11 @@ from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
 from django.contrib import messages
 
-class ProductListView(generics.ListAPIView):
-    queryset = Product.objects.filter(available=True)
-    serializer_class = ProductSerializer
+
+class ProductListView(ListView):
+    model = Product
+    template_name = 'admin/product_list.html'
+    context_object_name = 'products'
 
     def get_queryset(self):
         cache_key = 'available_products'
@@ -29,10 +33,26 @@ class ProductListView(generics.ListAPIView):
             queryset = Product.objects.filter(available=True)
             cache.set(cache_key, queryset, timeout=60 * 15)
         return queryset
-
 class ProductDetailView(generics.RetrieveAPIView):
+    lookup_field = 'id'
     queryset = Product.objects.filter(available=True)
     serializer_class = ProductSerializer
+
+class ProductDetailHTMLView(DetailView):
+    model = Product
+    template_name = 'shop/product_detail.html'
+    context_object_name = 'product'
+
+
+class CategoryProductListView(DetailView):
+    model = Category
+    template_name = 'shop/category_detail.html'
+    context_object_name = 'category'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['products'] = self.object.products.filter(available=True)
+        return context
 
 class CategoryListView(generics.ListAPIView):
     queryset = Category.objects.all()

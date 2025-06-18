@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+
+{% block title %}Список товаров - Магазин{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">Список товаров</h1>
+    
+    <div class="row">
+        {% for product in object_list %}
+        <div class="col-md-4 mb-4">
+            <div class="card h-100">
+                {% if product.image %}
+                <img src="{{ product.image.url }}" class="card-img-top" alt="{{ product.name }}">
+                {% else %}
+                <div class="bg-light text-center p-5">
+                    <i class="bi bi-image text-muted" style="font-size: 3rem;"></i>
+                </div>
+                {% endif %}
+                
+                <div class="card-body d-flex flex-column">
+                    <h5 class="card-title">{{ product.name }}</h5>
+                    <p class="card-text">{{ product.description|truncatechars:100 }}</p>
+                    
+                    <div class="mt-auto">
+                        <p class="fw-bold fs-5">{{ product.price }} ₽</p>
+                        
+                        <div class="d-flex justify-content-between mt-3">
+                            <!-- ИСПРАВЛЕННАЯ ССЫЛКА: используем shop:product-detail -->
+                            <a href="{% url 'shop:product-detail' product.pk product.slug %}"
+                               class="btn btn-primary">
+                                <i class="bi bi-eye me-1"></i> Подробнее
+                            </a>
+                            
+                            <form action="{% url 'shop:add-to-cart' product_id=product.id %}" method="post">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-success">
+                                    <i class="bi bi-cart-plus me-1"></i> В корзину
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card-footer bg-white">
+                    <small class="text-muted">
+                        <i class="bi bi-tag me-1"></i> 
+                        <a href="{% url 'shop:category-detail' pk=product.category.id %}">
+                            {{ product.category.name }}
+                        </a>
+                    </small>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12">
+            <div class="alert alert-info">
+                Товары не найдены
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
