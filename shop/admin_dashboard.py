@@ -254,7 +254,7 @@ class AdminDashboard(admin.AdminSite):
                 },
                 {
                     'name': 'Добавить в корзину',
-                    'url': reverse('add-to-cart', args=[1]),  # Пример с product_id=1
+                    'url': reverse('shop:add-to-cart', args=[1]),  # Пример с product_id=1
                     'method': 'POST'
                 }
             ],

@@ -53,7 +53,7 @@
                                 <i class="bi bi-info-circle"></i> Подробнее
                             </a>
                             {% if request.user.is_authenticated %}
-                                <a href="{% url 'add-to-cart' product.id %}" 
+                                <a href="{% url 'shop:add-to-cart' product.id %}"
                                    class="btn btn-primary">
                                     <i class="bi bi-cart-plus"></i> В корзину
                                 </a>
