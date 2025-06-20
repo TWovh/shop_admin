@@ -16,12 +16,12 @@ from django.contrib.admin.models import LogEntry, CHANGE, ADDITION
 from django.contrib.contenttypes.models import ContentType
 import json
 from django.http import HttpRequest, HttpResponse
-from .types import AuthenticatedRequest, AuthRequest
+from .types import AuthenticatedRequest
 from .models import User
 from django.contrib import messages
 from django import forms
 from .models import PaymentSettings, Payment
-
+from .models import Order, OrderItem
 
 
 
@@ -349,11 +349,21 @@ class DashboardProductAdmin(RoleBasedAdmin):
     def has_delete_permission(self, request, obj=None):
         return request.user.role == 'ADMIN'
 
+
+
+class OrderItemInline(admin.TabularInline):
+    model = OrderItem
+    extra = 1  # количество пустых строк
+    min_num = 1  # минимум 1 товар
+    fields = ('product', 'quantity', 'price')
+    autocomplete_fields = ('product',)
+
 @admin.register(Order, site=admin_site)
 class DashboardOrderAdmin(admin.ModelAdmin):
     list_display = ('id', 'user', 'total_price', 'status', 'payment_status_badge', 'created')
     search_fields = ('user__username', 'id')
     readonly_fields = ('payment_status_badge', 'payment_actions')
+    inlines = [OrderItemInline]
 
     def payment_status_badge(self, obj):
         colors = {
@@ -367,18 +377,24 @@ class DashboardOrderAdmin(admin.ModelAdmin):
             colors.get(obj.payment_status, 'gray'),
             obj.get_payment_status_display()
         )
-
     payment_status_badge.short_description = 'Статус оплаты'
 
     def payment_actions(self, obj):
-        if obj.payment_status == 'unpaid':
+        if obj.id and obj.payment_status == 'unpaid':
             return format_html(
                 '<a href="{}" class="button">Создать платеж</a>',
                 reverse('create-payment', args=[obj.id])
             )
         return '-'
-
     payment_actions.short_description = 'Действия'
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        # Обновил total_price после сохранения заказа
+        total = sum(item.total_price for item in obj.order_items.all())
+        if obj.total_price != total:
+            obj.total_price = total
+            obj.save()
 
 @admin.register(Category, site=admin_site)
 class DashboardCategoryAdmin(admin.ModelAdmin):
