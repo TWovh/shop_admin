@@ -17,7 +17,7 @@
         </thead>
         <tbody>
             {% for item in cart_items %}
-            <tr>
+            <tr id="cart-item-{{ item.id }}">
                 <td>{{ item.product.name }}</td>
                 <td>{{ item.product.price }} руб.</td>
                 <td>
@@ -28,7 +28,7 @@
                 </td>
                 <td id="total-price-{{ item.id }}">{{ item.total_price }} руб.</td>
                 <td>
-                    <a href="{% url 'shop:cart-remove' item.id %}" class="btn btn-sm btn-danger">Удалить</a>
+                    <button onclick="removeItem({{ item.id }})" class="btn btn-danger btn-sm">Удалить</button>
                 </td>
             </tr>
             {% endfor %}
@@ -50,7 +50,6 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-  // Получить CSRF токен из cookie
   function getCookie(name) {
     let cookieValue = null;
     if (document.cookie && document.cookie !== '') {
@@ -66,7 +65,6 @@ document.addEventListener('DOMContentLoaded', () => {
     return cookieValue;
   }
 
-  // Функция для обновления количества товара в корзине через PATCH-запрос
   function changeQuantity(itemId, newQuantity) {
     fetch(`/cart/item/${itemId}/update/`, {
       method: 'PATCH',
@@ -81,20 +79,51 @@ document.addEventListener('DOMContentLoaded', () => {
       return response.json();
     })
     .then(data => {
-      // Обновляем поле количества
       const quantityInput = document.querySelector(`#quantity-input-${itemId}`);
       if (quantityInput) quantityInput.value = data.quantity;
 
-      // Обновляем сумму для позиции
       const totalPriceElem = document.querySelector(`#total-price-${itemId}`);
       if (totalPriceElem) totalPriceElem.textContent = data.total_price.toFixed(2) + ' руб.';
 
-      // Обновляем общую сумму корзины (если в ответе есть, либо считаем на клиенте)
-      if (data.cart_total !== undefined) {
-        const cartTotalElem = document.querySelector('#cart-total-price');
-        if (cartTotalElem) {
-          cartTotalElem.textContent = data.cart_total.toFixed(2) + ' руб.';
-        }
+      const cartTotalElem = document.querySelector('#cart-total-price');
+      if (cartTotalElem && data.cart_total !== undefined) {
+        cartTotalElem.textContent = data.cart_total.toFixed(2) + ' руб.';
+      }
+    })
+    .catch(error => {
+      alert(error.message);
+    });
+  }
+
+  function removeItem(itemId) {
+    if (!confirm('Удалить этот товар из корзины?')) return;
+
+    fetch(`/cart/item/${itemId}/remove/`, {
+      method: 'DELETE',
+      headers: {
+        'X-CSRFToken': getCookie('csrftoken'),
+      },
+      credentials: 'include'
+    })
+    .then(response => {
+      if (!response.ok) throw new Error('Ошибка при удалении');
+      return response.json();
+    })
+    .then(data => {
+      // Удаляем строку товара из таблицы
+      const row = document.getElementById(`cart-item-${itemId}`);
+      if (row) row.remove();
+
+      // Обновляем общую сумму корзины, если она есть в ответе
+      const cartTotalElem = document.querySelector('#cart-total-price');
+      if (cartTotalElem && data.cart_total !== undefined) {
+        cartTotalElem.textContent = data.cart_total.toFixed(2) + ' руб.';
+      }
+
+      // Если корзина пуста, показываем сообщение
+      if (!document.querySelector('tbody tr')) {
+        const container = document.querySelector('.container');
+        container.innerHTML = `<div class="alert alert-info mt-4">Ваша корзина пуста</div>`;
       }
     })
     .catch(error => {
@@ -127,6 +156,9 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   });
+
+  // expose removeItem в глобальный контекст, чтобы inline onclick работал
+  window.removeItem = removeItem;
 });
 </script>
 {% endblock %}

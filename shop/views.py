@@ -227,8 +227,11 @@ class RemoveCartItemView(APIView):
     def delete(self, request, item_id):
         cart_item = get_object_or_404(CartItem, id=item_id, cart__user=request.user)
         cart_item.delete()
-        return Response({'status': 'removed'}, status=status.HTTP_204_NO_CONTENT)
 
+        cart = Cart.objects.get(user=request.user)
+        cart_total = cart.total_price
+
+        return Response({'status': 'removed', 'cart_total': float(cart_total)}, status=status.HTTP_200_OK)
 
 @login_required
 def checkout_view(request):
