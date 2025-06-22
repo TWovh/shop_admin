@@ -1,3 +1,4 @@
+from django.contrib.auth.decorators import login_required
 from django.views.generic import ListView, DetailView
 
 from .models import Product
@@ -204,17 +205,21 @@ def add_to_cart(request, product_id=None):
 class UpdateCartItemView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def post(self, request, item_id):
-        cart_item = get_object_or_404(CartItem, id=item_id, cart__user=request.user)
-        quantity = int(request.data.get('quantity', 1))
+    def patch(self, request, item_id):
+        item = get_object_or_404(CartItem, id=item_id, cart__user=request.user)
 
-        if quantity > 0:
-            cart_item.quantity = quantity
-            cart_item.save()
-        else:
-            cart_item.delete()
+        quantity = request.data.get('quantity')
+        try:
+            quantity = int(quantity)
+            if quantity < 1 or quantity > 100:
+                raise ValueError()
+        except (TypeError, ValueError):
+            return Response({'error': 'Неверное количество'}, status=400)
 
-        return Response({'status': 'updated'}, status=status.HTTP_200_OK)
+        item.quantity = quantity
+        item.save()
+
+        return Response({'status': 'updated', 'quantity': item.quantity, 'total_price': item.total_price})
 
 class RemoveCartItemView(APIView):
     permission_classes = [IsAuthenticated]
@@ -223,3 +228,8 @@ class RemoveCartItemView(APIView):
         cart_item = get_object_or_404(CartItem, id=item_id, cart__user=request.user)
         cart_item.delete()
         return Response({'status': 'removed'}, status=status.HTTP_204_NO_CONTENT)
+
+
+@login_required
+def checkout_view(request):
+    return render(request, 'admin/checkout.html')

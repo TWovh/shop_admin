@@ -9,7 +9,7 @@ from .views import (
     RemoveCartItemView,
     CategoryProductListView,
     ProductDetailHTMLView,
-    add_to_cart, CartView,
+    add_to_cart, CartView, checkout_view,
 )
 
 app_name = 'shop'
@@ -22,6 +22,7 @@ urlpatterns = [
     path('categories/<int:pk>/', CategoryDetailView.as_view(), name='category-detail'),
     path('cart/add/<int:product_id>/', add_to_cart, name='add-to-cart'),
     path('cart/', CartView.as_view(), name='cart'),
+    path('checkout/', checkout_view, name='checkout'),
     path('cart/item/<int:item_id>/update/', UpdateCartItemView.as_view(), name='cart-update'),
     path('cart/item/<int:item_id>/remove/', RemoveCartItemView.as_view(), name='cart-remove'),
 ]

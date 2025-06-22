@@ -117,6 +117,10 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.SessionAuthentication',  # Для веб-интерфейса
         'rest_framework.authentication.TokenAuthentication',    # Для API
     ],
+    'DEFAULT_RENDERER_CLASSES': [
+            'rest_framework.renderers.JSONRenderer',
+            'rest_framework.renderers.TemplateHTMLRenderer',
+        ],
     'DEFAULT_THROTTLE_RATES': {
         'user': '100/hour',  # Лимит по умолчанию
         'cart': '10/minute',  # Лимит для корзины
