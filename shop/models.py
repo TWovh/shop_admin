@@ -297,7 +297,7 @@ class Order(models.Model):
     phone = models.CharField(max_length=20)
     email = models.EmailField()
     city = models.CharField(max_length=100)
-    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='orders')
     payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='unpaid')
 
     class Meta:

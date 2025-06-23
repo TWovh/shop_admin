@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Мои заказы</h2>
+
+    {% if orders %}
+        <table class="table table-bordered mt-3">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Дата</th>
+                    <th>Сумма</th>
+                    <th>Статус</th>
+                    <th>Комментарий</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for order in orders %}
+                <tr>
+                    <td>{{ order.id }}</td>
+                    <td>{{ order.created|date:"d.m.Y H:i" }}</td>
+                    <td>{{ order.total_price }} руб.</td>
+                    <td>{{ order.status }}</td>
+                    <td>{{ order.comments|default:"-" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <div class="alert alert-info mt-3">У вас пока нет заказов.</div>
+    {% endif %}
+</div>
+{% endblock %}

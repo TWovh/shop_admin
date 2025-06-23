@@ -4,19 +4,17 @@ from rest_framework.throttling import UserRateThrottle
 
 class CustomPermission(permissions.BasePermission):
 
-    allowed_roles = ['ADMIN', 'STAFF']  # Роли по умолчанию
+    def get_allowed_roles(self):
+        return ['ADMIN', 'STAFF']
 
     def has_permission(self, request, view):
-        # Разрешаем только аутентифицированным пользователям
         if not request.user.is_authenticated:
             return False
 
-        # Проверяем, что у пользователя есть атрибут role
         if not hasattr(request.user, 'role'):
             return False
 
-        # Проверяем, что роль пользователя входит в разрешенные
-        return request.user.role in self.allowed_roles
+        return request.user.role in self.get_allowed_roles()
 
     def has_object_permission(self, request, view, obj):
         if request.user.role == 'ADMIN':
@@ -25,8 +23,8 @@ class CustomPermission(permissions.BasePermission):
         if hasattr(obj, 'user'):
             return obj.user == request.user
 
-        if hasattr(obj, 'cart') and hasattr(obj.cart, 'user'):
-            return obj.cart.user == request.user
+        if hasattr(obj, 'cart') and getattr(obj.cart, 'user', None) == request.user:
+            return True
 
         return False
 
@@ -48,15 +46,20 @@ class IsAdminOrUser(CustomPermission):
 
 
 class IsOwnerOrAdmin(CustomPermission):
+    def has_permission(self, request, view):
+        return super().has_permission(request, view)
 
     def has_object_permission(self, request, view, obj):
-        # Админам разрешаем всё
+        # Сначала — проверка на роль администратора
         if request.user.role == 'ADMIN':
             return True
 
-
+        # Проверка владельца объекта
         if hasattr(obj, 'user'):
             return obj.user == request.user
+
+        if hasattr(obj, 'cart') and hasattr(obj.cart, 'user'):
+            return obj.cart.user == request.user
 
         return False
 

@@ -1,7 +1,7 @@
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import ListView, DetailView
-
-from .models import Product
+from .models import Product, Order
 from rest_framework import generics
 from .serializers import ProductSerializer, CategorySerializer
 from .cart_serializers import CartItemSerializer, AddToCartSerializer
@@ -75,13 +75,15 @@ def index(request):
 
 
 
-class OrderListCreateView(generics.ListCreateAPIView):
+class OrderListCreateAPIView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
     serializer_class = OrderSerializer
     throttle_classes = [UserRateThrottle]
 
+    queryset = Order.objects.none()  # нужно, чтобы CBV работал без ошибок
+
     def get_queryset(self):
-        return self.request.user.orders.all()
+        return Order.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
         cart = self.request.user.cart
@@ -102,6 +104,15 @@ class OrderListCreateView(generics.ListCreateAPIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         return super().handle_exception(exc)
+
+
+class OrderListView(LoginRequiredMixin, ListView):
+    model = Order
+    template_name = 'shop/orders.html'
+    context_object_name = 'orders'
+
+    def get_queryset(self):
+        return Order.objects.filter(user=self.request.user).order_by('-created')
 
 
 
