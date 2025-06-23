@@ -55,6 +55,11 @@ class CategoryProductListView(DetailView):
         context['products'] = self.object.products.filter(available=True)
         return context
 
+class CategoryListHTMLView(ListView):
+    model = Category
+    template_name = 'shop/category_list.html'
+    context_object_name = 'categories'
+
 class CategoryListView(generics.ListAPIView):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
@@ -63,6 +68,15 @@ class CategoryDetailView(generics.RetrieveAPIView):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
 
+class CategoryDetailHTMLView(DetailView):
+    model = Category
+    template_name = 'shop/category_detail_info.html'
+    context_object_name = 'category'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['products'] = self.object.products.filter(available=True)
+        return context
 
 def index(request):
     try:

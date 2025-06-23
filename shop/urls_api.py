@@ -5,7 +5,8 @@ from .views import (
     ProductViewSet,
     CategoryViewSet,
     CartView,
-    OrderListCreateAPIView
+    OrderListCreateAPIView,
+    CategoryDetailView,
 )
 
 router = DefaultRouter()
@@ -16,6 +17,7 @@ api_urlpatterns = [
     path('cart/', CartView.as_view(), name='api-cart'),
     path('cart/items/<int:item_id>/', CartView.as_view(), name='api-cart-item-detail'),
     path('api/orders/', OrderListCreateAPIView.as_view(), name='order-list-api'),
+    path('api/categories/<int:pk>/', CategoryDetailView.as_view(), name='category-detail-api'),
     path('orders/<int:order_id>/pay/', CreatePaymentView.as_view(), name='create-payment'),
     path('webhooks/stripe/', StripeWebhookView.as_view(), name='stripe-webhook'),
 

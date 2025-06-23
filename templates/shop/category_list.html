@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Категории товаров{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">Категории</h1>
+    <div class="list-group">
+        {% for category in categories %}
+        <a href="{% url 'shop:category-detail' category.pk %}" class="list-group-item list-group-item-action">
+            {{ category.name }}
+        </a>
+        {% empty %}
+        <div class="alert alert-info">Категории не найдены</div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

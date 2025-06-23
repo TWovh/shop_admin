@@ -4,17 +4,17 @@
 
 {% block content %}
 <div class="container">
-    <!-- Заголовок с текущей ролью пользователя -->
+    <!-- Приветствие -->
     <h1 class="my-4">Добро пожаловать{% if request.user.is_authenticated %}, {{ request.user.first_name }}{% endif %}</h1>
-    
-    <!-- Статус пользователя -->
+
+    <!-- Роль пользователя -->
     {% if request.user.is_authenticated %}
         <div class="alert alert-info mb-4">
-            Ваш статус: 
+            Ваш статус:
             {% if request.user_role == "ADMIN" %}
                 <span class="badge bg-danger">Администратор</span>
             {% elif request.user_role == "STAFF" %}
-                <span class="badge bg-warning">Менеджер</span>
+                <span class="badge bg-warning text-dark">Менеджер</span>
             {% else %}
                 <span class="badge bg-success">Покупатель</span>
             {% endif %}
@@ -25,42 +25,36 @@
     <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 g-4">
         {% for product in products %}
         <div class="col">
-            <div class="card h-100 shadow-sm">
-                <!-- Изображение товара с ленивой загрузкой -->
+            <div class="card h-100 shadow-sm position-relative">
+                <!-- Картинка -->
                 <a href="{% url 'shop:product-detail' product.pk product.slug %}">
-                    <img src="{% if product.image %}{{ product.image.url }}{% else %}{% static 'images/no-image.jpg' %}{% endif %}" 
-                         class="card-img-top img-fluid" 
+                    <img src="{% if product.image %}{{ product.image.url }}{% else %}{% static 'images/no-image.jpg' %}{% endif %}"
+                         class="card-img-top img-fluid"
                          alt="{{ product.name }}"
                          loading="lazy"
                          style="height: 200px; object-fit: cover;">
                 </a>
 
+                <!-- Контент карточки -->
                 <div class="card-body d-flex flex-column">
-                    <!-- Название и цена -->
                     <h5 class="card-title">{{ product.name }}</h5>
-                    <p class="card-text text-success fs-4">
-                        {{ product.price|intcomma }} ₽
+                    <p class="card-text text-success fs-5">
+                        {{ product.price|intcomma }} {{ product.currency|default:"₴" }}
                     </p>
 
-                    <!-- Статус доступности -->
                     {% if not product.available %}
-                        <div class="alert alert-warning mt-auto">Товар временно отсутствует</div>
+                        <div class="alert alert-warning mt-auto">Нет в наличии</div>
                     {% else %}
-                        <!-- Кнопки действий -->
                         <div class="mt-auto btn-group">
-                            <a href="{% url 'shop:product-detail' product.pk product.slug %}">
-                               class="btn btn-outline-primary">
+                            <a href="{% url 'shop:product-detail' product.pk product.slug %}" class="btn btn-outline-primary">
                                 <i class="bi bi-info-circle"></i> Подробнее
                             </a>
                             {% if request.user.is_authenticated %}
-                                <a href="{% url 'shop:add-to-cart' product.id %}"
-                                   class="btn btn-primary">
+                                <a href="{% url 'shop:add-to-cart' product.id %}" class="btn btn-primary">
                                     <i class="bi bi-cart-plus"></i> В корзину
                                 </a>
                             {% else %}
-                                <button class="btn btn-secondary" 
-                                        disabled 
-                                        title="Для добавления в корзину войдите в систему">
+                                <button class="btn btn-secondary" disabled title="Войдите, чтобы добавить в корзину">
                                     <i class="bi bi-cart-plus"></i> В корзину
                                 </button>
                             {% endif %}
@@ -68,19 +62,17 @@
                     {% endif %}
                 </div>
 
-                <!-- Бейдж для акционных товаров -->
+                <!-- Скидка -->
                 {% if product.discount %}
                     <div class="position-absolute top-0 end-0 m-2">
-                        <span class="badge bg-danger rounded-pill">
-                            -{{ product.discount }}%
-                        </span>
+                        <span class="badge bg-danger rounded-pill">-{{ product.discount }}%</span>
                     </div>
                 {% endif %}
             </div>
         </div>
         {% empty %}
         <div class="col-12">
-            <div class="alert alert-info">Товары временно отсутствуют</div>
+            <div class="alert alert-info">Товары не найдены</div>
         </div>
         {% endfor %}
     </div>
@@ -94,13 +86,13 @@
                     <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Назад</a>
                 </li>
             {% endif %}
-            
+
             {% for num in page_obj.paginator.page_range %}
                 <li class="page-item {% if num == page_obj.number %}active{% endif %}">
                     <a class="page-link" href="?page={{ num }}">{{ num }}</a>
                 </li>
             {% endfor %}
-            
+
             {% if page_obj.has_next %}
                 <li class="page-item">
                     <a class="page-link" href="?page={{ page_obj.next_page_number }}">Вперед</a>
