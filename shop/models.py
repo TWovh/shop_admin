@@ -347,7 +347,9 @@ class PaymentSettings(models.Model):
     PAYMENT_CHOICES = [
         ('stripe', 'Stripe'),
         ('paypal', 'PayPal'),
-        ('yookassa', 'YooKassa'),
+        ('portmone', 'Portmone'),
+        ('liqpay', 'LiqPay'),
+        ('fondy', 'Fondy'),
     ]
 
     payment_system = models.CharField(

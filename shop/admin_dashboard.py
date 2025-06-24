@@ -559,6 +559,7 @@ class PaymentSettingsForm(forms.ModelForm):
 
 @admin.register(PaymentSettings, site=admin_site)
 class PaymentSettingsAdmin(admin.ModelAdmin):
+    form = PaymentSettingsForm
     list_display = ('payment_system', 'is_active', 'get_created_at')
     list_editable = ('is_active',)
     fieldsets = (
