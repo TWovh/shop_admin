@@ -1,5 +1,6 @@
 from django.urls import path
 from rest_framework.routers import DefaultRouter
+from . import views
 from .views_payments import CreatePaymentView, StripeWebhookView
 from .views import (
     ProductViewSet,
@@ -7,6 +8,7 @@ from .views import (
     CartView,
     OrderListCreateAPIView,
     CategoryDetailView,
+
 )
 
 router = DefaultRouter()
@@ -20,6 +22,8 @@ api_urlpatterns = [
     path('api/categories/<int:pk>/', CategoryDetailView.as_view(), name='category-detail-api'),
     path('orders/<int:order_id>/pay/', CreatePaymentView.as_view(), name='create-payment'),
     path('webhooks/stripe/', StripeWebhookView.as_view(), name='stripe-webhook'),
+    path("api/np/cities/", views.get_cities, name="np_get_cities"),
+    path("api/np/warehouses/", views.get_warehouses, name="np_get_warehouses"),
 
 ]
 

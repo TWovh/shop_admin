@@ -20,6 +20,10 @@ from django.core.exceptions import ValidationError
 from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
 from django.contrib import messages
+from .utils import get_nova_poshta_api_key
+from django.http import JsonResponse
+import requests
+
 
 
 class ProductListView(ListView):
@@ -260,4 +264,56 @@ class RemoveCartItemView(APIView):
 
 @login_required
 def checkout_view(request):
-    return render(request, 'admin/checkout.html')
+    cart = Cart.objects.prefetch_related('items__product').filter(user=request.user).first()
+    if not cart or not cart.items.exists():
+        return render(request, 'admin/checkout.html', {
+            'error': 'Ваша корзина пуста',
+        })
+
+    cart_items = cart.items.all()
+    cart_total = sum(item.total_price for item in cart_items)
+
+    return render(request, 'admin/checkout.html', {
+        'cart_items': cart_items,
+        'cart_total': cart_total,
+    })
+
+def get_cities(request):
+    api_key = get_nova_poshta_api_key()
+    if not api_key:
+        return JsonResponse({"error": "API ключ не настроен"}, status=400)
+
+    search = request.GET.get("search", "")
+    payload = {
+        "apiKey": api_key,
+        "modelName": "Address",
+        "calledMethod": "getCities",
+        "methodProperties": {
+            "FindByString": search,
+        }
+    }
+    response = requests.post("https://api.novaposhta.ua/v2.0/json/", json=payload)
+    return JsonResponse(response.json())
+
+def get_warehouses(request):
+    from .utils import get_nova_poshta_api_key
+    api_key = get_nova_poshta_api_key()
+    if not api_key:
+        return JsonResponse({"error": "API ключ не настроен"}, status=400)
+
+    city_ref = request.GET.get("city_ref")
+    if not city_ref:
+        return JsonResponse({"error": "Не передан city_ref"}, status=400)
+
+    payload = {
+        "apiKey": api_key,
+        "modelName": "Address",
+        "calledMethod": "getWarehouses",
+        "methodProperties": {
+            "CityRef": city_ref,
+            "Language": "UA"
+        }
+    }
+
+    response = requests.post("https://api.novaposhta.ua/v2.0/json/", json=payload)
+    return JsonResponse(response.json())

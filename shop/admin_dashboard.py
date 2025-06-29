@@ -620,3 +620,107 @@ class PaymentAdmin(admin.ModelAdmin):
         return format_html('<a href="{}">Заказ #{}</a>', url, obj.order.id)
 
     order_link.short_description = 'Заказ'
+
+
+def test_connection(self, request, queryset):
+    for settings in queryset:
+        try:
+            if settings.payment_system == 'stripe':
+                import stripe
+                stripe.api_key = settings.secret_key
+                stripe.Balance.retrieve()
+                self.message_user(request, f"Stripe успешно подключен!", messages.SUCCESS)
+
+            elif settings.payment_system == 'paypal':
+                import requests
+                auth = (settings.api_key, settings.secret_key)
+                response = requests.post(
+                    'https://api.sandbox.paypal.com/v1/oauth2/token',
+                    auth=auth,
+                    data={'grant_type': 'client_credentials'}
+                )
+                if response.status_code == 200:
+                    self.message_user(request, "PayPal успешно подключен!", messages.SUCCESS)
+                else:
+                    raise Exception(f"Ошибка PayPal: {response.text}")
+
+            elif settings.payment_system == 'portmone':
+                import requests
+                headers = {'Content-Type': 'application/json'}
+                data = {
+                    "payee_id": settings.api_key,
+                    "login": settings.api_key,
+                    "password": settings.secret_key,
+                }
+                response = requests.post(
+                    'https://api.portmone.com.ua/rest/merchant/login',
+                    json=data,
+                    headers=headers
+                )
+                if response.status_code == 200 and 'token' in response.text:
+                    self.message_user(request, "Portmone успешно подключен!", messages.SUCCESS)
+                else:
+                    raise Exception(f"Ошибка Portmone: {response.text}")
+            elif settings.payment_system == 'liqpay':
+                import base64
+                import hashlib
+                import json
+                import requests
+
+                public_key = settings.api_key
+                private_key = settings.secret_key
+                data = {
+                    "public_key": public_key,
+                    "version": "3",
+                    "action": "status",
+                    "order_id": "test-order-id"
+                }
+                data_str = base64.b64encode(json.dumps(data).encode()).decode()
+                sign_str = private_key + data_str + private_key
+                signature = base64.b64encode(hashlib.sha1(sign_str.encode()).digest()).decode()
+
+                response = requests.post(
+                    'https://www.liqpay.ua/api/request',
+                    data={"data": data_str, "signature": signature}
+                )
+                if response.status_code == 200 and 'status' in response.json():
+                    self.message_user(request, "LiqPay успешно подключен!", messages.SUCCESS)
+                else:
+                    raise Exception(f"Ошибка LiqPay: {response.text}")
+
+            elif settings.payment_system == 'fondy':
+                import requests
+                import hashlib
+                import json
+
+                merchant_id = settings.api_key
+                secret_key = settings.secret_key
+                request_data = {
+                    "request": {
+                        "server_callback_url": "https://example.com",
+                        "merchant_id": merchant_id,
+                        "order_id": "test-fondy-order-id",
+                        "amount": 100,
+                        "currency": "UAH"
+                    }
+                }
+                data_str = json.dumps(request_data["request"], separators=(',', ':'))
+                signature = hashlib.sha1((secret_key + data_str + secret_key).encode()).hexdigest()
+                request_data["request"]["signature"] = signature
+
+                response = requests.post(
+                    "https://api.fondy.eu/api/checkout/status",
+                    json=request_data
+                )
+
+                if response.status_code == 200 and response.json().get("response", {}).get("order_status"):
+                    self.message_user(request, "Fondy успешно подключен!", messages.SUCCESS)
+                else:
+                    raise Exception(f"Ошибка Fondy: {response.text}")
+
+
+            else:
+                self.message_user(request, f"Проверка {settings.get_payment_system_display()} не реализована", messages.WARNING)
+
+        except Exception as e:
+            self.message_user(request, f"Ошибка подключения к {settings.get_payment_system_display()}: {str(e)}", messages.ERROR)

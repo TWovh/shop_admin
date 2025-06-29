@@ -5,7 +5,7 @@ from .models import User
 
 
 class AuthenticatedRequest(HttpRequest):
-    authenticated_user: User  # Лучше использовать вашу конкретную модель User
+    authenticated_user: User
     user_role: str
 
     def __init__(self, *args, **kwargs):

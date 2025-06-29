@@ -467,3 +467,15 @@ class Payment(models.Model):
         if not self.user and self.order and self.order.user:
             self.user = self.order.user
         super().save(*args, **kwargs)
+
+
+class NovaPoshtaSettings(models.Model):
+    api_key = models.CharField(max_length=255, help_text="API ключ my.novaposhta.ua")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return "Настройки Новой Почты"
+
+    class Meta:
+        verbose_name = "Nova Poshta Настройка"
+        verbose_name_plural = "Nova Poshta Настройки"
