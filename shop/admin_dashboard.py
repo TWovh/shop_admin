@@ -1,5 +1,5 @@
 from django.utils.html import format_html
-from .models import Product, Category, Order, Cart, CartItem, User
+from .models import Product, Category, Order, Cart, CartItem, User, NovaPoshtaSettings
 from django.contrib import admin
 from django.urls import path, reverse
 from django.shortcuts import render, redirect, HttpResponseRedirect
@@ -22,6 +22,7 @@ from django.contrib import messages
 from django import forms
 from .models import PaymentSettings, Payment
 from .models import Order, OrderItem
+from .utils import test_payment_connection
 
 
 
@@ -360,8 +361,8 @@ class OrderItemInline(admin.TabularInline):
 
 @admin.register(Order, site=admin_site)
 class DashboardOrderAdmin(admin.ModelAdmin):
-    list_display = ('id', 'user', 'total_price', 'status', 'payment_status_badge', 'created')
-    search_fields = ('user__username', 'id')
+    list_display = ('id', 'user', 'payment_status', 'delivery_type', 'created')
+    list_filter = ('delivery_type', 'payment_status')
     readonly_fields = ('payment_status_badge', 'payment_actions')
     inlines = [OrderItemInline]
 
@@ -487,6 +488,7 @@ class CartItemAdmin(admin.ModelAdmin):
     list_filter = ('cart__user',)
     search_fields = ('product__name', 'cart__user__username')
     raw_id_fields = ('cart', 'product')
+    readonly_fields = ('total_price',)
 
     def total_price(self, obj):
         return obj.total_price
@@ -582,30 +584,11 @@ class PaymentSettingsAdmin(admin.ModelAdmin):
 
     def test_connection(self, request, queryset):
         for settings in queryset:
-            try:
-                # Простая проверка для Stripe
-                if settings.payment_system == 'stripe':
-                    import stripe
-                    stripe.api_key = settings.secret_key
-                    stripe.Balance.retrieve()  # Простой запрос
-                    self.message_user(
-                        request,
-                        f"Подключение к {settings.get_payment_system_display()} успешно!",
-                        messages.SUCCESS
-                    )
-                else:
-                    self.message_user(
-                        request,
-                        f"Проверка подключения для {settings.get_payment_system_display()} не реализована",
-                        messages.WARNING
-                    )
-            except Exception as e:
-                self.message_user(
-                    request,
-                    f"Ошибка подключения к {settings.get_payment_system_display()}: {str(e)}",
-                    messages.ERROR
-                )
-        test_connection.short_description = "Проверить подключение к платежной системе"
+            success, message = test_payment_connection(settings)
+            level = messages.SUCCESS if success else messages.ERROR
+            self.message_user(request, f"{settings.get_payment_system_display()}: {message}", level)
+
+    test_connection.short_description = "Проверить подключение к платёжной системе"
 
 
 @admin.register(Payment, site=admin_site)
@@ -622,105 +605,36 @@ class PaymentAdmin(admin.ModelAdmin):
     order_link.short_description = 'Заказ'
 
 
-def test_connection(self, request, queryset):
-    for settings in queryset:
-        try:
-            if settings.payment_system == 'stripe':
-                import stripe
-                stripe.api_key = settings.secret_key
-                stripe.Balance.retrieve()
-                self.message_user(request, f"Stripe успешно подключен!", messages.SUCCESS)
-
-            elif settings.payment_system == 'paypal':
-                import requests
-                auth = (settings.api_key, settings.secret_key)
-                response = requests.post(
-                    'https://api.sandbox.paypal.com/v1/oauth2/token',
-                    auth=auth,
-                    data={'grant_type': 'client_credentials'}
-                )
-                if response.status_code == 200:
-                    self.message_user(request, "PayPal успешно подключен!", messages.SUCCESS)
-                else:
-                    raise Exception(f"Ошибка PayPal: {response.text}")
-
-            elif settings.payment_system == 'portmone':
-                import requests
-                headers = {'Content-Type': 'application/json'}
-                data = {
-                    "payee_id": settings.api_key,
-                    "login": settings.api_key,
-                    "password": settings.secret_key,
-                }
-                response = requests.post(
-                    'https://api.portmone.com.ua/rest/merchant/login',
-                    json=data,
-                    headers=headers
-                )
-                if response.status_code == 200 and 'token' in response.text:
-                    self.message_user(request, "Portmone успешно подключен!", messages.SUCCESS)
-                else:
-                    raise Exception(f"Ошибка Portmone: {response.text}")
-            elif settings.payment_system == 'liqpay':
-                import base64
-                import hashlib
-                import json
-                import requests
-
-                public_key = settings.api_key
-                private_key = settings.secret_key
-                data = {
-                    "public_key": public_key,
-                    "version": "3",
-                    "action": "status",
-                    "order_id": "test-order-id"
-                }
-                data_str = base64.b64encode(json.dumps(data).encode()).decode()
-                sign_str = private_key + data_str + private_key
-                signature = base64.b64encode(hashlib.sha1(sign_str.encode()).digest()).decode()
-
-                response = requests.post(
-                    'https://www.liqpay.ua/api/request',
-                    data={"data": data_str, "signature": signature}
-                )
-                if response.status_code == 200 and 'status' in response.json():
-                    self.message_user(request, "LiqPay успешно подключен!", messages.SUCCESS)
-                else:
-                    raise Exception(f"Ошибка LiqPay: {response.text}")
-
-            elif settings.payment_system == 'fondy':
-                import requests
-                import hashlib
-                import json
-
-                merchant_id = settings.api_key
-                secret_key = settings.secret_key
-                request_data = {
-                    "request": {
-                        "server_callback_url": "https://example.com",
-                        "merchant_id": merchant_id,
-                        "order_id": "test-fondy-order-id",
-                        "amount": 100,
-                        "currency": "UAH"
-                    }
-                }
-                data_str = json.dumps(request_data["request"], separators=(',', ':'))
-                signature = hashlib.sha1((secret_key + data_str + secret_key).encode()).hexdigest()
-                request_data["request"]["signature"] = signature
-
-                response = requests.post(
-                    "https://api.fondy.eu/api/checkout/status",
-                    json=request_data
-                )
-
-                if response.status_code == 200 and response.json().get("response", {}).get("order_status"):
-                    self.message_user(request, "Fondy успешно подключен!", messages.SUCCESS)
-                else:
-                    raise Exception(f"Ошибка Fondy: {response.text}")
 
 
-            else:
-                self.message_user(request, f"Проверка {settings.get_payment_system_display()} не реализована", messages.WARNING)
+class NovaPoshtaSettingsForm(forms.ModelForm):
+    api_key = forms.CharField(
+        widget=forms.PasswordInput(render_value=True),
+        required=False,
+        label="API ключ",
+        help_text="Оставьте пустым, чтобы не менять"
+    )
 
-        except Exception as e:
-            self.message_user(request, f"Ошибка подключения к {settings.get_payment_system_display()}: {str(e)}", messages.ERROR)
+    class Meta:
+        model = NovaPoshtaSettings
+        fields = '__all__'
+
+
+@admin.register(NovaPoshtaSettings, site=admin_site)
+class NovaPoshtaSettingsAdmin(admin.ModelAdmin):
+    form = NovaPoshtaSettingsForm
+    list_display = ['masked_api_key', 'sender_city_ref', 'default_sender_name', 'updated_at']
+    readonly_fields = ['updated_at']
+
+    def masked_api_key(self, obj):
+        if obj.api_key:
+            return '*****'  # или можно показывать первые 4 символа + ****
+            # Например: return obj.api_key[:4] + '****'
+        return '-'
+
+    masked_api_key.short_description = 'API ключ'
+
+    def has_add_permission(self, request):
+        if NovaPoshtaSettings.objects.exists():
+            return False
+        return True

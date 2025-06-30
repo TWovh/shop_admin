@@ -299,6 +299,14 @@ class Order(models.Model):
     city = models.CharField(max_length=100)
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='orders')
     payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='unpaid')
+    city_ref = models.CharField(max_length=255, blank=True, null=True)
+    warehouse_ref = models.CharField(max_length=255, blank=True, null=True)
+    delivery_type = models.CharField(
+        max_length=20,
+        choices=[('prepaid', 'Оплата онлайн'), ('cod', 'Наложенный платеж')],
+        default='prepaid'
+    )
+    comments = models.TextField(blank=True, null=True, max_length=300)
 
     class Meta:
         indexes = [
@@ -471,10 +479,17 @@ class Payment(models.Model):
 
 class NovaPoshtaSettings(models.Model):
     api_key = models.CharField(max_length=255, help_text="API ключ my.novaposhta.ua")
+    sender_city_ref = models.CharField(max_length=255, blank=True, null=True, help_text="Ref города отправителя")
+    default_sender_name = models.CharField(max_length=255, blank=True, null=True, help_text="Имя отправителя по умолчанию")
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return "Настройки Новой Почты"
+
+    def save(self, *args, **kwargs):
+        if not self.pk and NovaPoshtaSettings.objects.exists():
+            raise ValidationError("Можно создать только одну запись с настройками Новой Почты.")
+        return super().save(*args, **kwargs)
 
     class Meta:
         verbose_name = "Nova Poshta Настройка"

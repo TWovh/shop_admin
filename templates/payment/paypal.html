@@ -1,0 +1,8 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+  <h2>Оплата через Stripe</h2>
+  <p>Ваш заказ №{{ order.id }} на сумму {{ order.total_price }} грн.</p>
+  <p>Интеграция Stripe еще не подключена.</p>
+  <a href="/orders/">Вернуться к заказам</a>
+{% endblock %}

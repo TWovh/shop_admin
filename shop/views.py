@@ -263,47 +263,64 @@ class RemoveCartItemView(APIView):
         return Response({'status': 'removed', 'cart_total': float(cart_total)}, status=status.HTTP_200_OK)
 
 @login_required
-def checkout_view(request):
+def start_checkout_view(request):
     cart = Cart.objects.prefetch_related('items__product').filter(user=request.user).first()
     if not cart or not cart.items.exists():
         return render(request, 'admin/checkout.html', {
             'error': 'Ваша корзина пуста',
         })
 
-    cart_items = cart.items.all()
-    cart_total = sum(item.total_price for item in cart_items)
+    # Создаем заказ
+    order = Order.objects.create(
+        user=request.user,
+        city='',
+        address='',
+        phone=request.user.profile.phone if hasattr(request.user, 'profile') else '',
+        email=request.user.email,
+        status='new',
+        payment_status='unpaid',
+    )
 
-    if request.method == 'POST':
-        city = request.POST.get('city')
-        warehouse = request.POST.get('warehouse')
-        payment_method = request.POST.get('payment_method')
-
-        # Создание заказа
-        order = Order.objects.create(
-            user=request.user,
-            city=city,
-            address=f"Отделение НП: {warehouse}",
-            phone=request.user.profile.phone if hasattr(request.user, 'profile') else '',
-            email=request.user.email,
-            total_price=Decimal(cart_total),
-            status='new',
-            payment_status='unpaid',
+    # Копируем товары из корзины
+    for item in cart.items.all():
+        OrderItem.objects.create(
+            order=order,
+            product=item.product,
+            quantity=item.quantity,
+            price=item.product.price
         )
 
-        # переносим корзину в заказ
-        for item in cart_items:
-            OrderItem.objects.create(
-                order=order,
-                product=item.product,
-                quantity=item.quantity,
-                price=item.product.price  # фиксируем цену на момент оформления
-            )
+    order.update_total_price()
+    cart.items.all().delete()
 
-        # Очистка корзины
-        cart.items.all().delete()
+    # Переход на форму доставки и оплаты
+    return redirect('shop:checkout', order_id=order.pk)
+
+
+@login_required
+def checkout_view(request, order_id):
+    order = get_object_or_404(Order, pk=order_id, user=request.user)
+
+    if request.method == 'POST':
+        city_name = request.POST.get('city')
+        city_ref = request.POST.get('city_ref')
+        warehouse_name = request.POST.get('warehouse_name')
+        warehouse_ref = request.POST.get('warehouse_ref')
+        payment_method = request.POST.get('payment_method')
+        delivery_type = request.POST.get('delivery_type')
+
+        order.city = city_name
+        order.city_ref = city_ref
+        order.address = f"Отделение НП: {warehouse_name}"
+        order.warehouse_ref = warehouse_ref
+        order.delivery_type = delivery_type
+        order.payment_status = 'unpaid'
+        order.save()
 
         # Редирект на оплату по выбранной системе
-        if payment_method == 'stripe':
+        if delivery_type == 'cod':
+            return redirect('/orders/')
+        elif payment_method == 'stripe':
             return redirect(f'/payment/stripe/{order.pk}/')
         elif payment_method == 'paypal':
             return redirect(f'/payment/paypal/{order.pk}/')
@@ -312,12 +329,12 @@ def checkout_view(request):
         elif payment_method == 'liqpay':
             return redirect(f'/payment/liqpay/{order.pk}/')
 
-        # fallback: в профиль
-        return redirect('/profile/orders/')
+        return redirect('/orders/')  # или другой путь, если ЛК есть
 
     return render(request, 'admin/checkout.html', {
-        'cart_items': cart_items,
-        'cart_total': cart_total,
+        'order': order,
+        'cart_items': order.order_items.all(),
+        'cart_total': order.total_price,
     })
 
 def get_cities(request):
@@ -359,3 +376,20 @@ def get_warehouses(request):
 
     response = requests.post("https://api.novaposhta.ua/v2.0/json/", json=payload)
     return JsonResponse(response.json())
+
+
+def payment_stripe(request, order_id):
+    order = get_object_or_404(Order, pk=order_id, user=request.user)
+    return render(request, 'payment/stripe.html', {'order': order})
+
+def payment_paypal(request, order_id):
+    order = get_object_or_404(Order, pk=order_id, user=request.user)
+    return render(request, 'payment/paypal.html', {'order': order})
+
+def payment_fondy(request, order_id):
+    order = get_object_or_404(Order, pk=order_id, user=request.user)
+    return render(request, 'payment/fondy.html', {'order': order})
+
+def payment_liqpay(request, order_id):
+    order = get_object_or_404(Order, pk=order_id, user=request.user)
+    return render(request, 'payment/liqpay.html', {'order': order})

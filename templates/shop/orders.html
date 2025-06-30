@@ -17,8 +17,10 @@
                     <th>#</th>
                     <th>Дата</th>
                     <th>Сумма</th>
-                    <th>Статус</th>
+                    <th>Статус заказа</th>
+                    <th>Оплата</th>
                     <th>Комментарий</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
@@ -26,9 +28,17 @@
                 <tr>
                     <td>{{ order.id }}</td>
                     <td>{{ order.created|date:"d.m.Y H:i" }}</td>
-                    <td>{{ order.total_price }} руб.</td>
+                    <td>{{ order.total_price }} грн.</td>
                     <td>{{ order.get_status_display }}</td>
+                    <td>{{ order.get_payment_status_display }}</td>
                     <td>{{ order.comments|default:"-" }}</td>
+                    <td>
+                        {% if order.status == 'new' %}
+                            <a href="{% url 'shop:checkout' order.id %}" class="btn btn-sm btn-primary">
+                                Продолжить оформление
+                            </a>
+                        {% endif %}
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>

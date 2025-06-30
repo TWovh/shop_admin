@@ -8,6 +8,8 @@ from .views import (
     CartView,
     OrderListCreateAPIView,
     CategoryDetailView,
+    CategoryListView,
+    ProductDetailView,
 
 )
 
@@ -18,8 +20,10 @@ router.register(r'categories', CategoryViewSet, basename='api-category')
 api_urlpatterns = [
     path('cart/', CartView.as_view(), name='api-cart'),
     path('cart/items/<int:item_id>/', CartView.as_view(), name='api-cart-item-detail'),
+    path('api/products/<int:pk>/', ProductDetailView.as_view(), name='product-detail-api'),
     path('api/orders/', OrderListCreateAPIView.as_view(), name='order-list-api'),
     path('api/categories/<int:pk>/', CategoryDetailView.as_view(), name='category-detail-api'),
+    path('api/categories/', CategoryListView.as_view(), name='category-list-api'),
     path('orders/<int:order_id>/pay/', CreatePaymentView.as_view(), name='create-payment'),
     path('webhooks/stripe/', StripeWebhookView.as_view(), name='stripe-webhook'),
     path("api/np/cities/", views.get_cities, name="np_get_cities"),

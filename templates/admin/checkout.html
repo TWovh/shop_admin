@@ -1,18 +1,22 @@
 {% extends "admin/base_site.html" %}
-
 {% block content %}
-  <h1>Оформление заказа</h1>
+<h1>Оформление заказа</h1>
 
+<form method="post">
+  {% csrf_token %}
   <h3>1. Доставка</h3>
+
   <label>Город:</label><br>
-  <input type="text" id="city" placeholder="Введите город...">
+  <input type="text" id="city" name="city" placeholder="Введите город...">
+  <input type="hidden" name="city_ref" id="city_ref">
   <ul id="city-suggestions" style="border:1px solid #ccc; display:none; max-height:150px; overflow-y:auto;"></ul>
 
   <br><br>
   <label>Отделение НП:</label><br>
-  <select id="warehouse">
+  <select id="warehouse" name="warehouse_ref">
     <option selected disabled>Оберіть спочатку місто</option>
   </select>
+  <input type="hidden" name="warehouse_name" id="warehouse_name">
 
   <hr>
 
@@ -22,65 +26,80 @@
   <label><input type="radio" name="payment_method" value="fondy"> Fondy</label><br>
   <label><input type="radio" name="payment_method" value="liqpay"> LiqPay</label><br>
 
+  <br>
+
+  <h3>3. Способ доставки</h3>
+  <label><input type="radio" name="delivery_type" value="prepaid" checked> Онлайн-оплата</label><br>
+  <label><input type="radio" name="delivery_type" value="cod"> Наложенный платёж</label><br>
+
   <hr>
 
-  <h3>3. Итого к оплате: <span id="order-total">{{ cart_total }} грн</span></h3>
+  <h3>4. Итого к оплате: <span>{{ cart_total }} грн</span></h3>
+  <button type="submit">Подтвердить заказ</button>
+</form>
 
-  <button type="submit">Перейти к оплате</button>
+<script>
+  const cityInput = document.getElementById("city");
+  const cityRefInput = document.getElementById("city_ref");
+  const citySuggestions = document.getElementById("city-suggestions");
+  const warehouseSelect = document.getElementById("warehouse");
+  const warehouseName = document.getElementById("warehouse_name");
 
-  <script>
-    const cityInput = document.getElementById("city");
-    const citySuggestions = document.getElementById("city-suggestions");
-    const warehouseSelect = document.getElementById("warehouse");
+  let cities = [];
 
-    let cities = [];
-
-    cityInput.addEventListener("input", () => {
-      const query = cityInput.value.trim();
-      if (query.length < 3) {
-        citySuggestions.style.display = "none";
-        return;
-      }
-
-      fetch(`/api/np/cities/?search=${query}`)
-        .then(res => res.json())
-        .then(data => {
-          citySuggestions.innerHTML = "";
-          cities = data.data || [];
-
-          cities.forEach(city => {
-            const li = document.createElement("li");
-            li.textContent = city.Description;
-            li.style.cursor = "pointer";
-            li.addEventListener("click", () => selectCity(city));
-            citySuggestions.appendChild(li);
-          });
-
-          citySuggestions.style.display = "block";
-        });
-    });
-
-    function selectCity(city) {
-      cityInput.value = city.Description;
+  cityInput.addEventListener("input", () => {
+    const query = cityInput.value.trim();
+    if (query.length < 3) {
       citySuggestions.style.display = "none";
-      loadWarehouses(city.Ref);
+      return;
     }
 
-    function loadWarehouses(cityRef) {
-      warehouseSelect.innerHTML = '<option>Завантаження...</option>';
-      fetch(`/api/np/warehouses/?city_ref=${cityRef}`)
-        .then(res => res.json())
-        .then(data => {
-          const warehouses = data.data || [];
-          warehouseSelect.innerHTML = "";
+    fetch(`/api/np/cities/?search=${query}`)
+      .then(res => res.json())
+      .then(data => {
+        citySuggestions.innerHTML = "";
+        cities = data.data || [];
 
-          warehouses.forEach(wh => {
-            const option = document.createElement("option");
-            option.value = wh.Ref;
-            option.textContent = wh.Description;
-            warehouseSelect.appendChild(option);
-          });
+        cities.forEach(city => {
+          const li = document.createElement("li");
+          li.textContent = city.Description;
+          li.style.cursor = "pointer";
+          li.addEventListener("click", () => selectCity(city));
+          citySuggestions.appendChild(li);
         });
-    }
-  </script>
+
+        citySuggestions.style.display = "block";
+      });
+  });
+
+  function selectCity(city) {
+    cityInput.value = city.Description;
+    cityRefInput.value = city.Ref;
+    citySuggestions.style.display = "none";
+    loadWarehouses(city.Ref);
+  }
+
+  function loadWarehouses(cityRef) {
+    warehouseSelect.innerHTML = '<option>Завантаження...</option>';
+    fetch(`/api/np/warehouses/?city_ref=${cityRef}`)
+      .then(res => res.json())
+      .then(data => {
+        const warehouses = data.data || [];
+        warehouseSelect.innerHTML = "";
+
+        warehouses.forEach(wh => {
+          const option = document.createElement("option");
+          option.value = wh.Ref;
+          option.textContent = wh.Description;
+          option.dataset.name = wh.Description;
+          warehouseSelect.appendChild(option);
+        });
+
+        warehouseSelect.addEventListener("change", () => {
+          const selectedOption = warehouseSelect.options[warehouseSelect.selectedIndex];
+          warehouseName.value = selectedOption.dataset.name;
+        });
+      });
+  }
+</script>
 {% endblock %}
