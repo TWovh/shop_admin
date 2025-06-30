@@ -1,7 +1,7 @@
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import ListView, DetailView
-from .models import Product, Order
+from .models import Product, Order, OrderItem
 from rest_framework import generics
 from .serializers import ProductSerializer, CategorySerializer
 from .cart_serializers import CartItemSerializer, AddToCartSerializer
@@ -23,7 +23,7 @@ from django.contrib import messages
 from .utils import get_nova_poshta_api_key
 from django.http import JsonResponse
 import requests
-
+from decimal import Decimal
 
 
 class ProductListView(ListView):
@@ -272,6 +272,48 @@ def checkout_view(request):
 
     cart_items = cart.items.all()
     cart_total = sum(item.total_price for item in cart_items)
+
+    if request.method == 'POST':
+        city = request.POST.get('city')
+        warehouse = request.POST.get('warehouse')
+        payment_method = request.POST.get('payment_method')
+
+        # Создание заказа
+        order = Order.objects.create(
+            user=request.user,
+            city=city,
+            address=f"Отделение НП: {warehouse}",
+            phone=request.user.profile.phone if hasattr(request.user, 'profile') else '',
+            email=request.user.email,
+            total_price=Decimal(cart_total),
+            status='new',
+            payment_status='unpaid',
+        )
+
+        # переносим корзину в заказ
+        for item in cart_items:
+            OrderItem.objects.create(
+                order=order,
+                product=item.product,
+                quantity=item.quantity,
+                price=item.product.price  # фиксируем цену на момент оформления
+            )
+
+        # Очистка корзины
+        cart.items.all().delete()
+
+        # Редирект на оплату по выбранной системе
+        if payment_method == 'stripe':
+            return redirect(f'/payment/stripe/{order.pk}/')
+        elif payment_method == 'paypal':
+            return redirect(f'/payment/paypal/{order.pk}/')
+        elif payment_method == 'fondy':
+            return redirect(f'/payment/fondy/{order.pk}/')
+        elif payment_method == 'liqpay':
+            return redirect(f'/payment/liqpay/{order.pk}/')
+
+        # fallback: в профиль
+        return redirect('/profile/orders/')
 
     return render(request, 'admin/checkout.html', {
         'cart_items': cart_items,

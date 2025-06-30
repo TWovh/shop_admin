@@ -4,6 +4,12 @@
 <div class="container mt-4">
     <h2>Мои заказы</h2>
 
+    {% if request.GET.success %}
+        <div class="alert alert-success mt-3">✅ Оплата прошла успешно</div>
+    {% elif request.GET.cancel %}
+        <div class="alert alert-danger mt-3">❌ Оплата не прошла или была отменена</div>
+    {% endif %}
+
     {% if orders %}
         <table class="table table-bordered mt-3">
             <thead>
@@ -21,7 +27,7 @@
                     <td>{{ order.id }}</td>
                     <td>{{ order.created|date:"d.m.Y H:i" }}</td>
                     <td>{{ order.total_price }} руб.</td>
-                    <td>{{ order.status }}</td>
+                    <td>{{ order.get_status_display }}</td>
                     <td>{{ order.comments|default:"-" }}</td>
                 </tr>
                 {% endfor %}
