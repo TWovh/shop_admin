@@ -12,10 +12,11 @@ STRIPE_API_KEY = os.getenv('STRIPE_API_KEY')
 STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
 STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET')
 
-"""CORS_ALLOWED_ORIGINS = ['домен']
-CSRF_TRUSTED_ORIGINS = ['домен']"""
+CORS_ALLOWED_ORIGINS = ["http://localhost:5173",]
+CSRF_TRUSTED_ORIGINS = ["http://localhost:5173",]
 ALLOWED_HOSTS = []
 AUTH_USER_MODEL = 'shop.User'
+CORS_ALLOW_CREDENTIALS = True
 
 
 LOGIN_URL = '/admin/login/'
@@ -50,11 +51,13 @@ INSTALLED_APPS = [
     "rest_framework.authtoken",
     "shop.apps.ShopConfig",
     "django.contrib.humanize",
+    "corsheaders",
 
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -120,7 +123,7 @@ REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': [
             'rest_framework.renderers.JSONRenderer',
             'rest_framework.renderers.TemplateHTMLRenderer',
-        ],
+    ],
     'DEFAULT_THROTTLE_RATES': {
         'user': '100/hour',  # Лимит по умолчанию
         'cart': '10/minute',  # Лимит для корзины

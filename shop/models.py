@@ -180,7 +180,7 @@ class Cart(models.Model):
             order = Order.objects.create(
                 user=self.user,
                 total_price=self.total_price,
-                shipping_address=shipping_address,
+                address=shipping_address,
                 phone=phone,
                 email=email,
                 comments=comments,

@@ -1,6 +1,9 @@
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import ListView, DetailView
+from rest_framework.request import Request
+
+from . import serializers
 from .models import Product, Order, OrderItem
 from rest_framework import generics
 from .serializers import ProductSerializer, CategorySerializer
@@ -23,7 +26,6 @@ from django.contrib import messages
 from .utils import get_nova_poshta_api_key
 from django.http import JsonResponse
 import requests
-from decimal import Decimal
 
 
 class ProductListView(ListView):
@@ -93,35 +95,62 @@ def index(request):
 
 
 
+class OrderCreateSerializer(serializers.Serializer):
+    address = serializers.CharField(required=True)
+    phone = serializers.CharField(required=True)
+    email = serializers.EmailField(required=True)
+    city = serializers.CharField(required=True)
+    delivery_type = serializers.ChoiceField(choices=[('prepaid', 'Оплата онлайн'), ('cod', 'Наложенный платеж')], default='prepaid')
+    comments = serializers.CharField(required=False, allow_blank=True, default='')
+
+
+
 class OrderListCreateAPIView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
     serializer_class = OrderSerializer
     throttle_classes = [UserRateThrottle]
 
-    queryset = Order.objects.none()  # нужно, чтобы CBV работал без ошибок
+    queryset = Order.objects.none()  # Чтобы CBV работал без ошибок
 
     def get_queryset(self):
         return Order.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
-        cart = self.request.user.cart
+        cart = get_object_or_404(Cart, user=self.request.user)
         if not cart.items.exists():
             raise ValidationError("Корзина пуста")
 
+        # Валидируем входящие данные через сериализатор
+        order_data_serializer = OrderCreateSerializer(data=self.request.data)
+        order_data_serializer.is_valid(raise_exception=True)
+        validated_data = order_data_serializer.validated_data
+
         order = cart.create_order(
-            shipping_address=serializer.validated_data['shipping_address'],
-            phone=serializer.validated_data['phone'],
-            email=serializer.validated_data['email'],
-            comments=serializer.validated_data.get('comments', '')
+            shipping_address=validated_data['address'],
+            phone=validated_data['phone'],
+            email=validated_data['email'],
+            comments=validated_data.get('comments', ''),
         )
-        serializer.instance = order
+        order.city = validated_data['city']
+        order.delivery_type = validated_data.get('delivery_type', 'prepaid')
+
+        if order.delivery_type == 'cod':
+            order.payment_status = 'unpaid'
+            order.status = 'processing'
+        else:
+            order.payment_status = 'unpaid'
+            order.status = 'new'
+
+        order.save()
+        return order
+
     def handle_exception(self, exc):
-        if isinstance(exc, (Cart.DoesNotExist, ValidationError)):
-            return Response(
-                {'error': str(exc)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
+        if isinstance(exc, (Cart.DoesNotExist, ValidationError, DjangoValidationError)):
+            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return super().handle_exception(exc)
+
 
 
 class OrderListView(LoginRequiredMixin, ListView):
@@ -133,10 +162,18 @@ class OrderListView(LoginRequiredMixin, ListView):
         return Order.objects.filter(user=self.request.user).order_by('-created')
 
 
+class OrderDetailAPIView(generics.RetrieveAPIView):
+    serializer_class = OrderSerializer
+    permission_classes = [IsAuthenticated]
+    lookup_url_kwarg = 'order_id'
+
+    def get_queryset(self):
+        return Order.objects.filter(user=self.request.user)
+
+
 
 class CartView(APIView):
     permission_classes = [IsAuthenticated]
-    throttle_classes = [CartThrottle]
 
     def get(self, request):
         """Получение содержимого корзины (для API и HTML)"""
@@ -156,33 +193,59 @@ class CartView(APIView):
             'total_price': total_price
         })
 
+
+
+
+class AddToCartView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request):
-        """Добавление товара в корзину"""
         serializer = AddToCartSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        product_id = serializer.validated_data['product_id']
+        quantity = serializer.validated_data['quantity']
 
-        product = get_object_or_404(Product, id=serializer.validated_data['product_id'])
-        if not product.available:
-            return Response(
-                {'error': 'Товар недоступен'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+        product = get_object_or_404(Product, id=product_id, available=True)
         cart, _ = Cart.objects.get_or_create(user=request.user)
-        item, created = CartItem.objects.get_or_create(
-            cart=cart,
-            product=product,
-            defaults={'quantity': serializer.validated_data['quantity']}
-        )
+        cart.add_product(product, quantity)
+        return Response({'message': 'Товар добавлен в корзину'}, status=status.HTTP_201_CREATED)
 
-        if not created:
-            item.quantity += serializer.validated_data['quantity']
-            item.save()
 
-        if request.accepted_renderer.format == 'html':
-            return redirect('cart')
-        return Response({'status': 'success'})
+class CartItemDetailView(APIView):
+    permission_classes = [IsAuthenticated]
 
+    def patch(self, request, item_id):
+        cart = get_object_or_404(Cart, user=request.user)
+        item = get_object_or_404(CartItem, id=item_id, cart=cart)
+
+        quantity = request.data.get('quantity')
+        if quantity is None:
+            return Response({'error': 'Поле quantity обязательно'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            quantity = int(quantity)
+            if quantity < 1 or quantity > 100:
+                raise ValueError()
+        except ValueError:
+            return Response({'error': 'Количество должно быть числом от 1 до 100'}, status=status.HTTP_400_BAD_REQUEST)
+
+        item.quantity = quantity
+        item.save()
+        return Response({'message': 'Количество обновлено'})
+
+    def delete(self, request, item_id):
+        cart = get_object_or_404(Cart, user=request.user)
+        item = get_object_or_404(CartItem, id=item_id, cart=cart)
+        item.delete()
+        return Response({'message': 'Товар удалён из корзины'}, status=status.HTTP_204_NO_CONTENT)
+
+class ClearCartView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        cart = get_object_or_404(Cart, user=request.user)
+        cart.clear()
+        return Response({'message': 'Корзина очищена'})
 
 class ProductViewSet(viewsets.ModelViewSet):
     permission_classes = [IsStaff]
@@ -210,7 +273,7 @@ def register(request):
     return render(request, 'registration/register.html', {'form': form})
 
 
-def add_to_cart(request, product_id=None):
+def add_to_cart(request, product_id=None): #delete
     if not request.user.is_authenticated:
         messages.error(request, "Для добавления в корзину войдите в систему")
         return redirect('login')
@@ -230,37 +293,6 @@ def add_to_cart(request, product_id=None):
 
     messages.success(request, f"Товар {product.name} добавлен в корзину")
     return redirect('shop:product-list')
-
-class UpdateCartItemView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def patch(self, request, item_id):
-        item = get_object_or_404(CartItem, id=item_id, cart__user=request.user)
-
-        quantity = request.data.get('quantity')
-        try:
-            quantity = int(quantity)
-            if quantity < 1 or quantity > 100:
-                raise ValueError()
-        except (TypeError, ValueError):
-            return Response({'error': 'Неверное количество'}, status=400)
-
-        item.quantity = quantity
-        item.save()
-
-        return Response({'status': 'updated', 'quantity': item.quantity, 'total_price': item.total_price})
-
-class RemoveCartItemView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def delete(self, request, item_id):
-        cart_item = get_object_or_404(CartItem, id=item_id, cart__user=request.user)
-        cart_item.delete()
-
-        cart = Cart.objects.get(user=request.user)
-        cart_total = cart.total_price
-
-        return Response({'status': 'removed', 'cart_total': float(cart_total)}, status=status.HTTP_200_OK)
 
 @login_required
 def start_checkout_view(request):

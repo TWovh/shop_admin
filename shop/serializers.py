@@ -1,7 +1,9 @@
 from rest_framework import serializers
-from .models import Product, Category, Order, OrderItem
+from .models import Product, Category, Order, OrderItem, CartItem
+from rest_framework.serializers import Serializer
 from rest_framework.reverse import reverse
-
+from rest_framework.exceptions import ValidationError
+from rest_framework.serializers import CharField, EmailField, ChoiceField
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
@@ -62,4 +64,24 @@ class OrderSerializer(serializers.ModelSerializer):
 class AddToCartSerializer(serializers.Serializer):
     product_id = serializers.IntegerField()
     quantity = serializers.IntegerField(min_value=1, max_value=100)
+
+class CartItemSerializer(serializers.ModelSerializer):
+    product = ProductSerializer(read_only=True)  # Вложенный сериализатор продукта
+    total_price = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CartItem
+        fields = ['id', 'product', 'quantity', 'total_price']
+
+    def get_total_price(self, obj):
+        return obj.product.price * obj.quantity
+
+class CreateOrderSerializer(serializers.Serializer):
+    address = serializers.CharField()
+    phone = serializers.CharField()
+    email = serializers.EmailField()
+    city = serializers.CharField()
+    delivery_type = serializers.ChoiceField(choices=[('prepaid', 'Оплата онлайн'), ('cod', 'Наложенный платеж')], default='prepaid')
+    comments = serializers.CharField(required=False, allow_blank=True)
+
 

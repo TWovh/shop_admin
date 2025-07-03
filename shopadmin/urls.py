@@ -11,10 +11,9 @@ from shop.views import index, register
 
 
 urlpatterns = [
-    path('', include(('shop.urls_views', 'shop'), namespace='shop')),
+    path('', include(('shop.urls_views', 'shop'), namespace='shop')),  # старый frontend (Django templates)
     path('admin/', admin_site.urls),
     path('api/', include('shop.urls_api')),
-
     # JWT Authentication
     path('api/auth/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
