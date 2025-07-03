@@ -1,5 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+
 from .views import (
     ProductViewSet,
     CategoryViewSet,
@@ -8,7 +10,7 @@ from .views import (
     AddToCartView,
     OrderListCreateAPIView,
     OrderDetailAPIView,
-    ClearCartView,
+    ClearCartView, RegisterView, CurrentUserView, LoginView,
 )
 from .views_payments import CreatePaymentView, StripeWebhookView
 from . import views
@@ -37,6 +39,12 @@ api_urlpatterns = [
     path("np/cities/", views.get_cities, name="np_get_cities"),
     path("np/warehouses/", views.get_warehouses, name="np_get_warehouses"),
 
+    #Авторизация
+    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/register/', RegisterView.as_view(), name='register'),
+    path('api/user/me/', CurrentUserView.as_view(), name='user_me'),
+    path('api/login/', LoginView.as_view(), name='login'),
 ]
 
 urlpatterns = api_urlpatterns + router.urls

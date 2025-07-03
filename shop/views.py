@@ -2,16 +2,18 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import ListView, DetailView
 from rest_framework.request import Request
+from django.contrib.auth import get_user_model, authenticate
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from . import serializers
 from .models import Product, Order, OrderItem
 from rest_framework import generics
-from .serializers import ProductSerializer, CategorySerializer
+from .serializers import ProductSerializer, CategorySerializer, UserSerializer, RegisterSerializer
 from .cart_serializers import CartItemSerializer, AddToCartSerializer
 from .models import Category, Cart, CartItem
 from rest_framework import status, viewsets
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from .serializers import OrderSerializer
 from django.contrib.auth import login
 from django.shortcuts import render, redirect
@@ -28,6 +30,8 @@ from django.http import JsonResponse
 import requests
 
 
+User = get_user_model()
+
 class ProductListView(ListView):
     model = Product
     template_name = 'admin/product_list.html'
@@ -40,15 +44,16 @@ class ProductListView(ListView):
             queryset = Product.objects.filter(available=True)
             cache.set(cache_key, queryset, timeout=60 * 15)
         return queryset
-class ProductDetailView(generics.RetrieveAPIView):
-    lookup_field = 'id'
-    queryset = Product.objects.filter(available=True)
-    serializer_class = ProductSerializer
 
 class ProductDetailHTMLView(DetailView):
     model = Product
     template_name = 'shop/product_detail.html'
     context_object_name = 'product'
+
+class ProductViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsStaff]
+    queryset = Product.objects.filter(available=True)
+    serializer_class = ProductSerializer
 
 
 class CategoryProductListView(DetailView):
@@ -73,6 +78,11 @@ class CategoryListView(generics.ListAPIView):
 class CategoryDetailView(generics.RetrieveAPIView):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
+
+class CategoryViewSet(viewsets.ModelViewSet):
+    queryset = Category.objects.all()
+    serializer_class = CategorySerializer
+    lookup_field = 'slug'
 
 class CategoryDetailHTMLView(DetailView):
     model = Category
@@ -247,17 +257,37 @@ class ClearCartView(APIView):
         cart.clear()
         return Response({'message': 'Корзина очищена'})
 
-class ProductViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsStaff]
-    queryset = Product.objects.filter(available=True)
-    serializer_class = ProductSerializer
-
-class CategoryViewSet(viewsets.ModelViewSet):
-    queryset = Category.objects.all()
-    serializer_class = CategorySerializer
-    lookup_field = 'slug'
 
 
+
+class CurrentUserView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(UserSerializer(request.user).data)
+
+class RegisterView(generics.CreateAPIView):
+    queryset = User.objects.all()
+    serializer_class = RegisterSerializer
+    permission_classes = [AllowAny]
+
+class LoginView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email')
+        password = request.data.get('password')
+
+        user = authenticate(request, email=email, password=password)
+        if user is not None:
+            refresh = RefreshToken.for_user(user)
+            return Response({
+                'user': UserSerializer(user).data,
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+            })
+        else:
+            return Response({'detail': 'Неверный email или пароль'}, status=status.HTTP_401_UNAUTHORIZED)
 
 def register(request):
     if request.method == 'POST':

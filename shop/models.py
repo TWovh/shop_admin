@@ -134,6 +134,14 @@ class Product(models.Model):
         if self.price <= 0:
             raise ValidationError("Цена должна быть положительной")
 
+class ProductImage(models.Model):
+    product = models.ForeignKey('Product', related_name='images', on_delete=models.CASCADE)
+    image = models.ImageField(upload_to='products/')
+    alt_text = models.CharField(max_length=255, blank=True)
+
+    def __str__(self):
+        return f"Image for {self.product.name}"
+
 
 class Cart(models.Model):
     user = models.OneToOneField(
