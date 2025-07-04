@@ -40,11 +40,11 @@ api_urlpatterns = [
     path("np/warehouses/", views.get_warehouses, name="np_get_warehouses"),
 
     #Авторизация
-    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    path('api/register/', RegisterView.as_view(), name='register'),
-    path('api/user/me/', CurrentUserView.as_view(), name='user_me'),
-    path('api/login/', LoginView.as_view(), name='login'),
+    path('auth/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('register/', RegisterView.as_view(), name='register'),
+    path('user/me/', CurrentUserView.as_view(), name='user_me'),
+    path('auth/login/', LoginView.as_view(), name='login'),
 ]
 
 urlpatterns = api_urlpatterns + router.urls

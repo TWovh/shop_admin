@@ -14,10 +14,10 @@ class CustomPermission(permissions.BasePermission):
         if not hasattr(request.user, 'role'):
             return False
 
-        return request.user.role in self.get_allowed_roles()
+        return request.user_role in self.get_allowed_roles()
 
     def has_object_permission(self, request, view, obj):
-        if request.user.role == 'ADMIN':
+        if request.user_role == 'ADMIN':
             return True
 
         if hasattr(obj, 'user'):
@@ -51,7 +51,7 @@ class IsOwnerOrAdmin(CustomPermission):
 
     def has_object_permission(self, request, view, obj):
         # Сначала — проверка на роль администратора
-        if request.user.role == 'ADMIN':
+        if request.user_role == 'ADMIN':
             return True
 
         # Проверка владельца объекта
@@ -72,6 +72,6 @@ class CartThrottle(UserRateThrottle):
     scope = 'cart'  # Уникальный идентификатор для настроек
     rate = '10/minute'  # 10 запросов в минуту
     def get_rate(self):
-        if self.request.user.role == 'ADMIN':
+        if self.request.user_role == 'ADMIN':
             return '100/minute'  # Админам больше запросов
         return '10/minute'  # Обычным пользователям меньше

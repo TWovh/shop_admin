@@ -8,7 +8,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from . import serializers
 from .models import Product, Order, OrderItem
 from rest_framework import generics
-from .serializers import ProductSerializer, CategorySerializer, UserSerializer, RegisterSerializer
+from .serializers import ProductSerializer, CategorySerializer, UserSerializer, RegisterSerializer, \
+    CurrentUserSerializer
 from .cart_serializers import CartItemSerializer, AddToCartSerializer
 from .models import Category, Cart, CartItem
 from rest_framework import status, viewsets
@@ -51,7 +52,7 @@ class ProductDetailHTMLView(DetailView):
     context_object_name = 'product'
 
 class ProductViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsStaff]
+    permission_classes = [AllowAny]
     queryset = Product.objects.filter(available=True)
     serializer_class = ProductSerializer
 
@@ -264,12 +265,13 @@ class CurrentUserView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        return Response(UserSerializer(request.user).data)
+        serializer = CurrentUserSerializer(request.user)
+        return Response(serializer.data)
 
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
-    serializer_class = RegisterSerializer
     permission_classes = [AllowAny]
+    serializer_class = RegisterSerializer
 
 class LoginView(APIView):
     permission_classes = [AllowAny]
@@ -288,6 +290,8 @@ class LoginView(APIView):
             })
         else:
             return Response({'detail': 'Неверный email или пароль'}, status=status.HTTP_401_UNAUTHORIZED)
+
+
 
 def register(request):
     if request.method == 'POST':

@@ -109,19 +109,24 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class RegisterSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
-    password2 = serializers.CharField(write_only=True)
+    password = serializers.CharField(write_only=True, validators=[validate_password])
+    phone = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = User
-        fields = ['email', 'phone', 'password', 'password2']  # username убираем, используем email
-
-    def validate(self, data):
-        if data['password'] != data['password2']:
-            raise serializers.ValidationError({"password": "Пароли не совпадают"})
-        return data
+        fields = ('id', 'email', 'password', 'phone')
 
     def create(self, validated_data):
-        validated_data.pop('password2')
-        user = User.objects.create_user(**validated_data)
+        user = User(
+            email=validated_data['email'],
+            phone=validated_data.get('phone', ''),
+        )
+        user.set_password(validated_data['password'])
+        user.save()
         return user
+
+
+class CurrentUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ('id', 'email', 'phone', 'role')

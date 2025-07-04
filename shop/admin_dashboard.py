@@ -49,7 +49,7 @@ class AdminDashboard(admin.AdminSite):
             if not request.user.is_authenticated:
                 return self.login(request)
 
-            if not hasattr(request.user, 'role') or request.user.role not in ['ADMIN', 'STAFF']:
+            if not hasattr(request.user, 'role') or request.user_role not in ['ADMIN', 'STAFF']:
                 return self.no_permission(request)
 
             return view(request, *args, **kwargs)
@@ -60,7 +60,7 @@ class AdminDashboard(admin.AdminSite):
         return (
                 request.user.is_authenticated and
                 hasattr(request.user, 'role') and
-                request.user.role in ['ADMIN', 'STAFF']
+                request.user_role in ['ADMIN', 'STAFF']
         )
 
 
@@ -68,7 +68,7 @@ class AdminDashboard(admin.AdminSite):
         app_list = super().get_app_list(request, app_label)
 
         # Проверка прав перед добавлением разделов
-        if request.user.role in ['ADMIN', 'STAFF']:
+        if request.user_role in ['ADMIN', 'STAFF']:
             for app in app_list:
                 if app['app_label'] == 'auth':
                     app['models'].append({
@@ -79,7 +79,7 @@ class AdminDashboard(admin.AdminSite):
                     })
                     break
 
-        if request.user.role in ['ADMIN', 'STAFF']:
+        if request.user_role in ['ADMIN', 'STAFF']:
             app_list.append({
                 'name': 'Корзины',
                 'app_label': 'carts',
@@ -229,7 +229,7 @@ class AdminDashboard(admin.AdminSite):
 
     def index(self, request: AuthenticatedRequest, extra_context=None) -> HttpResponse:
 
-        if request.user.role not in ['ADMIN', 'STAFF']:
+        if request.user_role not in ['ADMIN', 'STAFF']:
             return self.no_permission(request)
 
         extra_context = extra_context or {}
@@ -329,7 +329,7 @@ class RoleBasedAdmin(admin.ModelAdmin):
     def has_permission(self, request):
         return (
                 request.user.is_authenticated and
-                request.user.role in ['ADMIN', 'STAFF']
+                request.user_role in ['ADMIN', 'STAFF']
         )
 
 @admin.register(Product, site=admin_site)
@@ -342,13 +342,13 @@ class DashboardProductAdmin(RoleBasedAdmin):
     def has_add_permission(self, request):
         if not request.user.is_authenticated:
             return False
-        return request.user.role in {'ADMIN', 'STAFF'}
+        return request.user_role in {'ADMIN', 'STAFF'}
 
     def has_change_permission(self, request, obj=None):
-        return request.user.role in ['ADMIN', 'STAFF']
+        return request.user_role in ['ADMIN', 'STAFF']
 
     def has_delete_permission(self, request, obj=None):
-        return request.user.role == 'ADMIN'
+        return request.user_role == 'ADMIN'
 
 
 
