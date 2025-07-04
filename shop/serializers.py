@@ -28,7 +28,6 @@ class ProductImageSerializer(serializers.ModelSerializer):
         return obj.image.url
 
 class ProductSerializer(serializers.ModelSerializer):
-    url = serializers.SerializerMethodField()
     category = serializers.StringRelatedField()
     images = ProductImageSerializer(many=True, read_only=True)
 
@@ -38,12 +37,7 @@ class ProductSerializer(serializers.ModelSerializer):
             'id', 'name', 'slug', 'category',
             'images', 'description', 'price',
             'available', 'created', 'updated',
-            'url',
         ]
-
-    def get_url(self, obj):
-        request = self.context.get('request')
-        return request.build_absolute_uri(obj.get_absolute_url())
 
     def validate_price(self, value):
         if value <= 0:
