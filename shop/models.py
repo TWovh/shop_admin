@@ -98,7 +98,6 @@ class Product(models.Model):
     category = models.ForeignKey(Category, related_name='products', on_delete=models.CASCADE)
     name = models.CharField(max_length=200, db_index=True, verbose_name="Название")
     slug = models.SlugField(max_length=200, db_index=True, unique=True)
-    image = models.ImageField(upload_to='products/%Y/%m/%d', blank=True, verbose_name="Изображение")
     stock = models.IntegerField(default=0)
 
     def image_preview(self):
@@ -135,6 +134,13 @@ class ProductImage(models.Model):
     product = models.ForeignKey('Product', related_name='images', on_delete=models.CASCADE)
     image = models.ImageField(upload_to='products/')
     alt_text = models.CharField(max_length=255, blank=True)
+    is_main = models.BooleanField(default=False, verbose_name="Главная картинка")
+
+    def save(self, *args, **kwargs):
+        # Убедиться, что только одно изображение может быть главным
+        if self.is_main:
+            ProductImage.objects.filter(product=self.product, is_main=True).update(is_main=False)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"Image for {self.product.name}"

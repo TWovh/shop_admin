@@ -17,27 +17,34 @@ class CategorySerializer(serializers.ModelSerializer):
 
 class ProductImageSerializer(serializers.ModelSerializer):
     image = serializers.SerializerMethodField()
+
     class Meta:
         model = ProductImage
-        fields = ['image', 'alt_text']
+        fields = ['image', 'alt_text', 'is_main']
 
     def get_image(self, obj):
         request = self.context.get('request')
-        if obj.image and request:
-            return request.build_absolute_uri(obj.image.url)
-        return obj.image.url
+        return request.build_absolute_uri(obj.image.url) if obj.image and request else None
 
 class ProductSerializer(serializers.ModelSerializer):
     category = serializers.StringRelatedField()
     images = ProductImageSerializer(many=True, read_only=True)
+    main_image = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
         fields = [
             'id', 'name', 'slug', 'category',
-            'images', 'description', 'price',
+            'images', 'main_image', 'description', 'price',
             'available', 'created', 'updated',
         ]
+
+    def get_main_image(self, obj):
+        request = self.context.get('request')
+        main_img = obj.images.filter(is_main=True).first()
+        if main_img and main_img.image:
+            return request.build_absolute_uri(main_img.image.url)
+        return None
 
     def validate_price(self, value):
         if value <= 0:
@@ -62,7 +69,7 @@ class OrderSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Order
-        fields = ['id', 'user', 'status', 'total_price', 'shipping_address',
+        fields = ['id', 'user', 'status', 'total_price', 'address',
                   'phone', 'email', 'comments', 'created', 'items']
         read_only_fields = ['user', 'status', 'total_price', 'created', 'items']
 

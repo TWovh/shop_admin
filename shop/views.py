@@ -33,38 +33,14 @@ import requests
 
 User = get_user_model()
 
-class ProductListView(ListView):
-    model = Product
-    template_name = 'admin/product_list.html'
-    context_object_name = 'products'
-
-    def get_queryset(self):
-        cache_key = 'available_products'
-        queryset = cache.get(cache_key)
-        if not queryset:
-            queryset = Product.objects.filter(available=True)
-            cache.set(cache_key, queryset, timeout=60 * 15)
-        return queryset
-
-class ProductDetailHTMLView(DetailView):
-    model = Product
-    template_name = 'shop/product_detail.html'
-    context_object_name = 'product'
-
 class ProductViewSet(viewsets.ModelViewSet):
     permission_classes = [AllowAny]
     queryset = Product.objects.filter(available=True)
     serializer_class = ProductSerializer
 
-
-class CategoryProductListView(DetailView):
-    model = Category
-    template_name = 'shop/category_detail.html'
-    context_object_name = 'category'
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['products'] = self.object.products.filter(available=True)
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context.update({"request": self.request})
         return context
 
 class CategoryListHTMLView(ListView):
@@ -307,26 +283,6 @@ def register(request):
     return render(request, 'registration/register.html', {'form': form})
 
 
-def add_to_cart(request, product_id=None): #delete
-    if not request.user.is_authenticated:
-        messages.error(request, "Для добавления в корзину войдите в систему")
-        return redirect('login')
-
-    product = get_object_or_404(Product, id=product_id)
-    cart, _ = Cart.objects.get_or_create(user=request.user)
-
-    item, created = CartItem.objects.get_or_create(
-        cart=cart,
-        product=product,
-        defaults={'quantity': 1}
-    )
-
-    if not created:
-        item.quantity += 1
-        item.save()
-
-    messages.success(request, f"Товар {product.name} добавлен в корзину")
-    return redirect('shop:product-list')
 
 @login_required
 def start_checkout_view(request):

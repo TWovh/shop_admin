@@ -1,5 +1,6 @@
 from django.utils.html import format_html
-from .models import Product, Category, Order, Cart, CartItem, User, NovaPoshtaSettings
+from shopadmin import settings
+from .models import Product, Category, Order, Cart, CartItem, User, NovaPoshtaSettings, ProductImage
 from django.contrib import admin
 from django.urls import path, reverse
 from django.shortcuts import render, redirect, HttpResponseRedirect
@@ -7,16 +8,11 @@ from django.db.models import Count, Sum, Avg
 from django.utils import timezone
 from datetime import timedelta
 from django.core.paginator import Paginator
-from django.http import Http404
 from django.template.response import TemplateResponse
-from django.contrib.auth.admin import UserAdmin, GroupAdmin
+from django.contrib.auth.admin import UserAdmin
 from django.contrib.admin.forms import AdminAuthenticationForm
 from django.core.exceptions import ValidationError
 from django.contrib.admin.models import LogEntry, CHANGE, ADDITION
-from django.contrib.contenttypes.models import ContentType
-import json
-from django.http import HttpRequest, HttpResponse
-from .types import AuthenticatedRequest
 from .models import User
 from django.contrib import messages
 from django import forms
@@ -27,245 +23,58 @@ from .utils import test_payment_connection
 
 
 class AdminDashboard(admin.AdminSite):
-    index_template = 'admin/dashboard.html'
-    site_header = 'Панель управления магазином'
-    site_title = 'Администрирование магазина'
-
-    def get_urls(self):
-        urls = super().get_urls()
-        custom_urls = [
-            path('statistics/', self.admin_view(self.statistics_view), name='statistics'),
-        ]
-        return custom_urls + urls
-
-    def admin_view(self, view, cacheable=False):
-        from functools import wraps
-
-        @wraps(view)
-        def wrapper(request: HttpRequest, *args, **kwargs):
-            if not hasattr(request, 'POST'):
-                request.POST = getattr(request, 'POST', {})
-
-            if not request.user.is_authenticated:
-                return self.login(request)
-
-            if not hasattr(request.user, 'role') or request.user_role not in ['ADMIN', 'STAFF']:
-                return self.no_permission(request)
-
-            return view(request, *args, **kwargs)
-
-        return super().admin_view(wrapper, cacheable)
+    site_header = "Панель управления"
+    site_title = "Админка"
+    index_title = "Добро пожаловать в админку"
 
     def has_permission(self, request):
-        return (
-                request.user.is_authenticated and
-                hasattr(request.user, 'role') and
-                request.user_role in ['ADMIN', 'STAFF']
-        )
+        return request.user.is_active and request.user.is_authenticated
 
-
-    def get_app_list(self, request, app_label=None):
-        app_list = super().get_app_list(request, app_label)
-
-        # Проверка прав перед добавлением разделов
-        if request.user_role in ['ADMIN', 'STAFF']:
-            for app in app_list:
-                if app['app_label'] == 'auth':
-                    app['models'].append({
-                        'name': 'Статистика',
-                        'object_name': 'statistics',
-                        'admin_url': reverse('myadmin:statistics'),
-                        'view_only': True,
-                    })
-                    break
-
-        if request.user_role in ['ADMIN', 'STAFF']:
-            app_list.append({
-                'name': 'Корзины',
-                'app_label': 'carts',
-                'models': [
-                    {
-                        'name': 'Корзины',
-                        'object_name': 'cart',
-                        'admin_url': reverse('admin:shop_cart_changelist'),
-                    },
-                    {
-                        'name': 'Элементы корзины',
-                        'object_name': 'cartitem',
-                        'admin_url': reverse('admin:shop_cartitem_changelist'),
-                    }
-                ]
-            })
-
-            app_list.append({
-                'name': 'Платежи',
-                'app_label': 'payments',
-                'models': [
-                    {
-                        'name': 'Настройки платежей',
-                        'object_name': 'paymentsettings',
-                        'admin_url': reverse('myadmin:shop_paymentsettings_changelist'),
-                    },
-                    {
-                        'name': 'История платежей',
-                        'object_name': 'payment',
-                        'admin_url': reverse('myadmin:shop_payment_changelist'),
-                    }
-                ]
-            })
-
-        return app_list
-
-
-
-
-
-    def add_product(self, request):
-        if request.method == 'POST':
-            return HttpResponseRedirect(reverse('myadmin:shop_product_changelist'))
-        return TemplateResponse(request, 'admin/add_product.html', self.each_context(request))
-
-    def add_category(self, request):
-        from django import forms
-        from django.contrib import messages
-
-        class CategoryForm(forms.ModelForm):
-            class Meta:
-                model = Category
-                fields = ['name', 'slug']
-                widgets = {
-                    'name': forms.TextInput(attrs={'class': 'vTextField'}),
-                    'slug': forms.TextInput(attrs={'class': 'vTextField'}),
-                }
-
-        if request.method == 'POST':
-            form = CategoryForm(request.POST)
-            if form.is_valid():
-                form.save()
-                messages.success(request, 'Категория успешно добавлена')
-                return HttpResponseRedirect(reverse('myadmin:shop_category_changelist'))
-
-        else:
-            form = CategoryForm()
-
-        context = {
-            'form': form,
-            'title': 'Добавить категорию',
-            **self.each_context(request),
-        }
-        return TemplateResponse(request, 'admin/add_category.html', context)
-
-    def save_model(self, request, obj, form, change):
-        super().save_model(request, obj, form, change)
-        LogEntry.objects.log_action(
-            user_id=request.user.pk,
-            content_type_id=ContentType.objects.get_for_model(obj).pk,
-            object_id=obj.pk,
-            object_repr=str(obj),
-            action_flag=CHANGE if change else ADDITION,
-            change_message=json.dumps(form.changed_data)
-        )
-
-
-    def no_permission(self, request: AuthenticatedRequest) -> HttpResponse:
+    def no_permission(self, request):
         context = self.each_context(request)
         context.update({
             'title': 'Доступ запрещен',
-            'user_role': request.user.get_role_display(),
+            'user_role': getattr(request.user, 'role', 'UNKNOWN'),
         })
-        return TemplateResponse(
-            request,
-            'admin/no_permission.html',
-            context,
-            status=403
-        )
-
-    def redirect_to_api_products(self, request):
-        return redirect(reverse('api-product-list'))  # Проверить есть ли он юрлс
-
-    def redirect_to_api_product_detail(self, request, pk):
-        return redirect(reverse('api-product-detail', args=[pk]))
-
-    def redirect_to_api_cart_add(self, request):
-        return redirect(reverse('api-cart'))
+        return TemplateResponse(request, 'admin/no_permission.html', context, status=403)
 
     def get_dashboard_stats(self):
+        sales_data = Order.objects.filter(created__gte=timezone.now() - timedelta(days=30))
+        sales_chart = sales_data.values('created__date').annotate(total=Sum('total_price')).order_by('created__date')
 
-        sales_data = (
-            Order.objects
-            .filter(created__gte=timezone.now() - timedelta(days=30))
-            .values('created__date')
-            .annotate(total=Sum('total_price'))
-            .order_by('created__date')
-        )
-
-        top_products = (
-            Product.objects
-            .annotate(
-                order_count=Count('orderitem'),  # Количество заказов для товара
-                revenue=Sum('orderitem__price')  # Общая выручка по товару
-            )
-            .order_by('-order_count')[:5]
-        )
+        top_products = Product.objects.annotate(
+            order_count=Count('orderitem'),
+            revenue=Sum('orderitem__price')
+        ).order_by('-order_count')[:5]
 
         total_stats = Order.objects.aggregate(
             total_sales=Sum('total_price'),
             avg_order=Avg('total_price')
         )
-        user_stats = {
-            'user_count': User.objects.count(),
-            'active_users': User.objects.filter(is_active=True).count()
-        }
 
         return {
-            'sales_data': list(sales_data),
-            'sales_labels': [item['created__date'].strftime('%Y-%m-%d') for item in sales_data],
-            'sales_values': [float(item['total']) for item in sales_data],
+            'sales_labels': [item['created__date'].strftime('%Y-%m-%d') for item in sales_chart],
+            'sales_values': [float(item['total']) for item in sales_chart],
             'top_products': top_products,
             'total_sales': total_stats['total_sales'] or 0,
             'avg_order': total_stats['avg_order'] or 0,
             'product_count': Product.objects.count()
         }
 
-    def index(self, request: AuthenticatedRequest, extra_context=None) -> HttpResponse:
-
-        if request.user_role not in ['ADMIN', 'STAFF']:
+    def index(self, request, extra_context=None):
+        if getattr(request, 'user_role', '') not in ['ADMIN', 'STAFF']:
             return self.no_permission(request)
 
-        extra_context = extra_context or {}
         stats = self.get_dashboard_stats()
-
+        extra_context = extra_context or {}
         extra_context.update({
-            'api_links': [
-                {
-                    'name': 'Список товаров',
-                    'url': reverse('shop:product-list'),
-                    'method': 'GET'
-                },
-                {
-                    'name': 'Список категорий',
-                    'url': reverse('shop:category-list'),
-                    'method': 'GET'
-                },
-
-                {
-                    'name': 'Детали товара',
-                    'url': '/api/products/1/',  # Или используйте reverse с параметрами
-                    'method': 'GET'
-                },
-                {
-                    'name': 'Добавить в корзину',
-                    'url': reverse('shop:add-to-cart', args=[1]),  # Пример с product_id=1
-                    'method': 'POST'
-                }
-            ],
             'total_sales': stats['total_sales'],
             'product_count': stats['product_count'],
             'top_products': stats['top_products'],
             'sales_chart': {
                 'labels': stats['sales_labels'],
                 'data': stats['sales_values']
-            }
+            },
         })
         return super().index(request, extra_context)
 
@@ -275,48 +84,101 @@ class AdminDashboard(admin.AdminSite):
             end_date = request.GET.get('end_date')
 
             orders = Order.objects.all()
-
             if start_date:
                 orders = orders.filter(created__gte=start_date)
             if end_date:
                 orders = orders.filter(created__lte=end_date)
 
             paginator = Paginator(orders, 25)
-            page_number = request.GET.get('page')
+            page_obj = paginator.get_page(request.GET.get('page'))
 
-            try:
-                page_obj = paginator.get_page(page_number)
-            except Http404:
-                page_obj = paginator.get_page(1)
-
-            categories_stats = (
-                Category.objects
-                .annotate(total_sales=Sum('products__orderitem__price'))
-                .exclude(total_sales=None)
-                .order_by('-total_sales')
-            )
+            categories_stats = Category.objects.annotate(
+                total_sales=Sum('products__orderitem__price')
+            ).exclude(total_sales=None).order_by('-total_sales')
 
             payment_stats = Payment.objects.filter(
                 created__gte=timezone.now() - timedelta(days=30)
             ).values('status').annotate(
-                count=Count('id'),
-                total=Sum('amount')
+                count=Count('id'), total=Sum('amount')
             )
 
-            context = {
-                'total_sales': orders.aggregate(total=Sum('total_price'))['total'] or 0,
+            context = self.each_context(request)
+            context.update({
+                'title': 'Статистика продаж',
                 'orders_count': orders.count(),
                 'recent_orders': orders.order_by('-created')[:10],
                 'categories_stats': categories_stats,
-                **self.each_context(request),
-                'title': 'Статистика продаж',
                 'payment_stats': list(payment_stats),
                 'payment_total': Payment.objects.aggregate(total=Sum('amount'))['total'] or 0,
-            }
+                'total_sales': orders.aggregate(total=Sum('total_price'))['total'] or 0,
+                'page_obj': page_obj
+            })
             return TemplateResponse(request, 'admin/statistics.html', context)
         except Exception as e:
-            return self.message_user(request, f"Ошибка: {str(e)}", level='error')
-# Замена админки через эту команду
+            messages.error(request, f"Ошибка: {str(e)}")
+            return HttpResponseRedirect(reverse('myadmin:index'))
+
+    def get_app_list(self, request, app_label=None):
+        from django.urls import NoReverseMatch
+
+        app_list = [
+            {
+                'name': 'Товары',
+                'app_label': 'products',
+                'models': [
+                    {'name': 'Продукты', 'admin_url': reverse('myadmin:shop_product_changelist')},
+                    {'name': 'Категории', 'admin_url': reverse('myadmin:shop_category_changelist')},
+                ]
+            },
+            {
+                'name': 'Клиенты',
+                'app_label': 'clients',
+                'models': [
+                    {'name': 'Пользователи', 'admin_url': reverse('myadmin:shop_user_changelist')},
+                ]
+            },
+            {
+                'name': 'Заказы',
+                'app_label': 'orders',
+                'models': [
+                    {'name': 'Заказы', 'admin_url': reverse('myadmin:shop_order_changelist')},
+                    {'name': 'Корзины пользователей', 'admin_url': reverse('myadmin:shop_cart_changelist')},
+                    {'name': 'История Платежей', 'admin_url': reverse('myadmin:shop_payment_changelist')},
+                ]
+            },
+            {
+                'name': 'Настройки АПИ',
+                'app_label': 'settings',
+                'models': [
+                    {'name': 'Настройки платежных систем', 'admin_url': reverse('myadmin:shop_paymentsettings_changelist')},
+                    {'name': 'Настройки Новой Почты', 'admin_url': reverse('myadmin:shop_novaposhtasettings_changelist')},
+                ]
+            },
+            {
+                'name': 'Аналитика',
+                'app_label': 'analytics',
+                'models': [
+                    {'name': 'Статистика', 'admin_url': reverse('myadmin:statistics')},
+                ]
+            },
+        ]
+
+        # Log Entries — только ADMIN
+        if getattr(request, 'user_role', '') == 'ADMIN':
+            try:
+                app_list.append({
+                    'name': 'Система',
+                    'app_label': 'admin',
+                    'models': [
+                        {'name': 'Log entries', 'admin_url': reverse('admin:admin_logentry_changelist')},
+                    ]
+                })
+            except NoReverseMatch:
+                pass
+
+        return app_list
+
+
 admin_site = AdminDashboard(name='myadmin')
 
 
@@ -332,9 +194,17 @@ class RoleBasedAdmin(admin.ModelAdmin):
                 request.user_role in ['ADMIN', 'STAFF']
         )
 
+class ProductImageInline(admin.TabularInline):
+    model = ProductImage
+    extra = 1
+    fields = ('image', 'alt_text', 'is_main')
+    readonly_fields = ()
+    can_delete = True
+
 @admin.register(Product, site=admin_site)
 class DashboardProductAdmin(RoleBasedAdmin):
-    list_display = ('name', 'price', 'category', 'available')
+    inlines = [ProductImageInline]
+    list_display = ['name', 'price', 'available', 'created']
     list_filter = ('category', 'available')
     search_fields = ('name', 'description')
     prepopulated_fields = {'slug': ('name',)}
@@ -349,7 +219,6 @@ class DashboardProductAdmin(RoleBasedAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return request.user_role == 'ADMIN'
-
 
 
 class OrderItemInline(admin.TabularInline):
@@ -410,7 +279,7 @@ class DashboardCategoryAdmin(admin.ModelAdmin):
 # Администратор (полные права)
 @admin.register(User, site=admin_site)
 class CustomUserAdmin(UserAdmin):
-    list_display = ('email', 'get_role_display', 'is_staff', 'is_active')  # Используем get_role_display
+    list_display = ('email', 'is_staff', 'is_active')  # Используем get_role_display
     list_filter = ('role', 'is_staff', 'is_active')
 
     def get_form(self, request, obj=None, **kwargs):
