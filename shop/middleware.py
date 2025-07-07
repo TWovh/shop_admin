@@ -3,9 +3,6 @@ from django.http import HttpRequest
 from .types import AuthenticatedRequest, User
 
 
-# Если вы хотите использовать ваш AuthenticatedRequest для тайп-хинтинга в представлениях,
-# вы можете его импортировать, но не использовать для изменения __class__
-# from .types import AuthenticatedRequest as AuthenticatedRequestTypeHint
 
 class AuthMiddleware(MiddlewareMixin):
     def process_request(self, request: HttpRequest):

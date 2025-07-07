@@ -1,23 +1,23 @@
+from django.db.models.functions import TruncDate
 from django.utils.html import format_html
-from shopadmin import settings
-from .models import Product, Category, Order, Cart, CartItem, User, NovaPoshtaSettings, ProductImage
+from django.utils.timezone import make_aware
+
+from shop.models import Order as ShopOrder
+from .models import Product, Category, Cart, CartItem, User, NovaPoshtaSettings, ProductImage, OrderItem, PaymentSettings, Payment
 from django.contrib import admin
-from django.urls import path, reverse
-from django.shortcuts import render, redirect, HttpResponseRedirect
-from django.db.models import Count, Sum, Avg
+from django.urls import reverse
+from django.shortcuts import HttpResponseRedirect
+from django.db.models import F, DecimalField, Sum, Count, Avg
 from django.utils import timezone
-from datetime import timedelta
+from datetime import timedelta, datetime
 from django.core.paginator import Paginator
 from django.template.response import TemplateResponse
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.admin.forms import AdminAuthenticationForm
 from django.core.exceptions import ValidationError
-from django.contrib.admin.models import LogEntry, CHANGE, ADDITION
-from .models import User
+from django.contrib.admin.models import LogEntry
 from django.contrib import messages
 from django import forms
-from .models import PaymentSettings, Payment
-from .models import Order, OrderItem
 from .utils import test_payment_connection
 
 
@@ -39,27 +39,45 @@ class AdminDashboard(admin.AdminSite):
         return TemplateResponse(request, 'admin/no_permission.html', context, status=403)
 
     def get_dashboard_stats(self):
-        sales_data = Order.objects.filter(created__gte=timezone.now() - timedelta(days=30))
-        sales_chart = sales_data.values('created__date').annotate(total=Sum('total_price')).order_by('created__date')
+        thirty_days_ago = timezone.now() - timedelta(days=30)
+
+        sales_data = ShopOrder.objects.filter(created__gte=thirty_days_ago)
+        sales_chart = sales_data.annotate(
+            date=TruncDate('created')
+        ).values('date').annotate(
+            total=Sum('total_price')
+        ).order_by('date')
 
         top_products = Product.objects.annotate(
             order_count=Count('orderitem'),
-            revenue=Sum('orderitem__price')
+            revenue=Sum(
+                F('orderitem__price') * F('orderitem__quantity'),
+                output_field=DecimalField()
+            )
         ).order_by('-order_count')[:5]
 
-        total_stats = Order.objects.aggregate(
+        total_stats = ShopOrder.objects.aggregate(
             total_sales=Sum('total_price'),
             avg_order=Avg('total_price')
         )
 
         return {
-            'sales_labels': [item['created__date'].strftime('%Y-%m-%d') for item in sales_chart],
+            'sales_labels': [item['date'].strftime('%Y-%m-%d') for item in sales_chart],
             'sales_values': [float(item['total']) for item in sales_chart],
             'top_products': top_products,
             'total_sales': total_stats['total_sales'] or 0,
             'avg_order': total_stats['avg_order'] or 0,
-            'product_count': Product.objects.count()
+            'product_count': Product.objects.count(),
+            'user_count': User.objects.count(),
         }
+
+    def get_urls(self):
+        from django.urls import path
+        urls = super().get_urls()
+        custom_urls = [
+            path('statistics/', self.admin_view(self.statistics_view), name='statistics'),
+        ]
+        return custom_urls + urls
 
     def index(self, request, extra_context=None):
         if getattr(request, 'user_role', '') not in ['ADMIN', 'STAFF']:
@@ -83,11 +101,32 @@ class AdminDashboard(admin.AdminSite):
             start_date = request.GET.get('start_date')
             end_date = request.GET.get('end_date')
 
-            orders = Order.objects.all()
+            total_sales = 0
+            avg_order = 0
+            orders_count = 0
+            product_sales_by_day = []
+
+            orders = ShopOrder.objects.all()
             if start_date:
-                orders = orders.filter(created__gte=start_date)
+                start_dt = make_aware(datetime.strptime(start_date, '%Y-%m-%d'))
+                orders = orders.filter(created__gte=start_dt)
             if end_date:
-                orders = orders.filter(created__lte=end_date)
+                end_dt = make_aware(datetime.strptime(end_date, '%Y-%m-%d'))
+                orders = orders.filter(created__lte=end_dt)
+
+            if start_date and end_date:
+                total_sales = orders.aggregate(total=Sum('total_price'))['total'] or 0
+                avg_order = orders.aggregate(avg=Avg('total_price'))['avg'] or 0
+                orders_count = orders.count()
+
+                product_sales_by_day = (
+                    OrderItem.objects
+                    .filter(order__created__range=(start_dt, end_dt))
+                    .annotate(date=TruncDate('order__created'))
+                    .values('product__name', 'date')
+                    .annotate(total=Sum(F('price') * F('quantity'), output_field=DecimalField()))
+                    .order_by('date')
+                )
 
             paginator = Paginator(orders, 25)
             page_obj = paginator.get_page(request.GET.get('page'))
@@ -96,22 +135,36 @@ class AdminDashboard(admin.AdminSite):
                 total_sales=Sum('products__orderitem__price')
             ).exclude(total_sales=None).order_by('-total_sales')
 
-            payment_stats = Payment.objects.filter(
-                created__gte=timezone.now() - timedelta(days=30)
+            raw_stats = Payment.objects.filter(
+                created_at__gte=timezone.now() - timedelta(days=30)
             ).values('status').annotate(
                 count=Count('id'), total=Sum('amount')
             )
 
+            # Словарь отображаемых значений статусов
+            STATUS_DISPLAY = dict(Payment.STATUS_CHOICES)
+
+            payment_stats = [
+                {
+                    'status': stat['status'],
+                    'status_display': STATUS_DISPLAY.get(stat['status'], stat['status']),
+                    'count': stat['count'],
+                    'total': stat['total'] or 0
+                }
+                for stat in raw_stats
+            ]
             context = self.each_context(request)
             context.update({
                 'title': 'Статистика продаж',
-                'orders_count': orders.count(),
+                'orders_count': orders_count,
                 'recent_orders': orders.order_by('-created')[:10],
                 'categories_stats': categories_stats,
-                'payment_stats': list(payment_stats),
+                'payment_stats': payment_stats,
                 'payment_total': Payment.objects.aggregate(total=Sum('amount'))['total'] or 0,
-                'total_sales': orders.aggregate(total=Sum('total_price'))['total'] or 0,
-                'page_obj': page_obj
+                'total_sales': total_sales,
+                'avg_order': avg_order,
+                'page_obj': page_obj,
+                'product_sales_by_day': product_sales_by_day,
             })
             return TemplateResponse(request, 'admin/statistics.html', context)
         except Exception as e:
@@ -228,7 +281,7 @@ class OrderItemInline(admin.TabularInline):
     fields = ('product', 'quantity', 'price')
     autocomplete_fields = ('product',)
 
-@admin.register(Order, site=admin_site)
+@admin.register(ShopOrder, site=admin_site)
 class DashboardOrderAdmin(admin.ModelAdmin):
     list_display = ('id', 'user', 'payment_status', 'delivery_type', 'created')
     list_filter = ('delivery_type', 'payment_status')

@@ -78,43 +78,54 @@
                         <td>{{ order.created|date:"d.m.Y H:i" }}</td>
                         <td>{{ order.total_price|intcomma }} ₽</td>
                         <td>
-                            <span class="status-badge status-{{ order.status }}">
+                            {% if order.status %}
+                                <span class="status-badge status-{{ order.status }}">
                                 {{ order.get_status_display }}
-                            </span>
+                                </span>
+                            {% else %}
+                                <span class="status-badge status-unknown">
+                                        -
+                                </span>
+                            {% endif %}
                         </td>
                         <td>
-                            <a href="{% url 'admin:shop_order_change' order.id %}" class="action-link" title="Редактировать">
+                            <a href="{% url 'admin:shop_order_change' order.id %}" class="action-link"
+                               title="Редактировать">
                                 <i class="fas fa-edit"></i>
                             </a>
                         </td>
                     </tr>
                     {% empty %}
-                    <tr>
-                        <td colspan="6" class="no-orders">Заказы не найдены</td>
-                    </tr>
+                        <tr>
+                            <td colspan="6" class="no-orders">Заказы не найдены</td>
+                        </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
         <div class="module">
-            <h2>Статистика платежей</h2>
+            <h3>Статистика платежей</h3>
             <table>
+                <thead>
                 <tr>
                     <th>Статус</th>
                     <th>Количество</th>
                     <th>Сумма</th>
                 </tr>
+                </thead>
+                <tbody>
                 {% for stat in payment_stats %}
-                <tr>
-                    <td>{{ stat.get_status_display }}</td>
-                    <td>{{ stat.count }}</td>
-                    <td>{{ stat.total }} ₽</td>
-                </tr>
+                    <tr>
+                        <td>{{ stat.status_display }}</td>
+                        <td>{{ stat.count }}</td>
+                        <td>{{ stat.total|floatformat:0 }} ₽</td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="3">Нет данных</td>
+                    </tr>
                 {% endfor %}
-                <tr style="font-weight:bold">
-                    <td>Всего</td>
-                    <td colspan="2">{{ payment_total }} ₽</td>
-                </tr>
+                </tbody>
             </table>
         </div>
 

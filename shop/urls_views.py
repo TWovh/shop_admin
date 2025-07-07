@@ -8,11 +8,13 @@ from .views import (
     CategoryListHTMLView,
     CategoryDetailHTMLView,
     start_checkout_view,
+    statistics_view,
 )
 
 app_name = 'shop'
 urlpatterns = [
     path('', index, name='index'),
+    path("admin/statistics/", statistics_view, name="statistics"),
     path('categories/', CategoryListHTMLView.as_view(), name='category-list'),
     path('categories/<int:pk>/', CategoryDetailHTMLView.as_view(), name='category-detail'),
     path('orders/', OrderListView.as_view(), name='orders'),

@@ -1,15 +1,13 @@
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import ListView, DetailView
-from rest_framework.request import Request
 from django.contrib.auth import get_user_model, authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
-
 from . import serializers
 from .models import Product, Order, OrderItem
 from rest_framework import generics
 from .serializers import ProductSerializer, CategorySerializer, UserSerializer, RegisterSerializer, \
-    CurrentUserSerializer
+                          CurrentUserSerializer
 from .cart_serializers import CartItemSerializer, AddToCartSerializer
 from .models import Category, Cart, CartItem
 from rest_framework import status, viewsets
@@ -21,17 +19,16 @@ from django.shortcuts import render, redirect
 from .forms import UserRegistrationForm
 from rest_framework.throttling import UserRateThrottle
 from .permissions import IsStaff, IsOwnerOrAdmin, CartThrottle
-from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
-from django.contrib import messages
 from .utils import get_nova_poshta_api_key
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpRequest
 import requests
-
+from shop.admin_dashboard import admin_site
 
 User = get_user_model()
+
 
 class ProductViewSet(viewsets.ModelViewSet):
     permission_classes = [AllowAny]
@@ -43,23 +40,28 @@ class ProductViewSet(viewsets.ModelViewSet):
         context.update({"request": self.request})
         return context
 
+
 class CategoryListHTMLView(ListView):
     model = Category
     template_name = 'shop/category_list.html'
     context_object_name = 'categories'
 
+
 class CategoryListView(generics.ListAPIView):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
+
 
 class CategoryDetailView(generics.RetrieveAPIView):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
 
+
 class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
     lookup_field = 'slug'
+
 
 class CategoryDetailHTMLView(DetailView):
     model = Category
@@ -71,6 +73,7 @@ class CategoryDetailHTMLView(DetailView):
         context['products'] = self.object.products.filter(available=True)
         return context
 
+
 def index(request):
     try:
         products = Product.objects.filter(available=True).order_by('-created')[:8]
@@ -81,15 +84,18 @@ def index(request):
         return render(request, 'shop/index.html', {'products': []})
 
 
+def statistics_view(request: HttpRequest):
+    return admin_site.statistics_view(request)
+
 
 class OrderCreateSerializer(serializers.Serializer):
     address = serializers.CharField(required=True)
     phone = serializers.CharField(required=True)
     email = serializers.EmailField(required=True)
     city = serializers.CharField(required=True)
-    delivery_type = serializers.ChoiceField(choices=[('prepaid', 'Оплата онлайн'), ('cod', 'Наложенный платеж')], default='prepaid')
+    delivery_type = serializers.ChoiceField(choices=[('prepaid', 'Оплата онлайн'), ('cod', 'Наложенный платеж')],
+                                            default='prepaid')
     comments = serializers.CharField(required=False, allow_blank=True, default='')
-
 
 
 class OrderListCreateAPIView(generics.ListCreateAPIView):
@@ -140,6 +146,7 @@ class OrderListCreateAPIView(generics.ListCreateAPIView):
 
 
 
+
 class OrderListView(LoginRequiredMixin, ListView):
     model = Order
     template_name = 'shop/orders.html'
@@ -156,7 +163,6 @@ class OrderDetailAPIView(generics.RetrieveAPIView):
 
     def get_queryset(self):
         return Order.objects.filter(user=self.request.user)
-
 
 
 class CartView(APIView):
@@ -179,8 +185,6 @@ class CartView(APIView):
             'items': serializer.data,
             'total_price': total_price
         })
-
-
 
 
 class AddToCartView(APIView):
@@ -226,6 +230,7 @@ class CartItemDetailView(APIView):
         item.delete()
         return Response({'message': 'Товар удалён из корзины'}, status=status.HTTP_204_NO_CONTENT)
 
+
 class ClearCartView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -235,8 +240,6 @@ class ClearCartView(APIView):
         return Response({'message': 'Корзина очищена'})
 
 
-
-
 class CurrentUserView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -244,10 +247,12 @@ class CurrentUserView(APIView):
         serializer = CurrentUserSerializer(request.user)
         return Response(serializer.data)
 
+
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     permission_classes = [AllowAny]
     serializer_class = RegisterSerializer
+
 
 class LoginView(APIView):
     permission_classes = [AllowAny]
@@ -268,7 +273,6 @@ class LoginView(APIView):
             return Response({'detail': 'Неверный email или пароль'}, status=status.HTTP_401_UNAUTHORIZED)
 
 
-
 def register(request):
     if request.method == 'POST':
         form = UserRegistrationForm(request.POST)
@@ -281,7 +285,6 @@ def register(request):
     else:
         form = UserRegistrationForm()
     return render(request, 'registration/register.html', {'form': form})
-
 
 
 @login_required
@@ -359,6 +362,7 @@ def checkout_view(request, order_id):
         'cart_total': order.total_price,
     })
 
+
 def get_cities(request):
     api_key = get_nova_poshta_api_key()
     if not api_key:
@@ -375,6 +379,7 @@ def get_cities(request):
     }
     response = requests.post("https://api.novaposhta.ua/v2.0/json/", json=payload)
     return JsonResponse(response.json())
+
 
 def get_warehouses(request):
     from .utils import get_nova_poshta_api_key
@@ -404,13 +409,16 @@ def payment_stripe(request, order_id):
     order = get_object_or_404(Order, pk=order_id, user=request.user)
     return render(request, 'payment/stripe.html', {'order': order})
 
+
 def payment_paypal(request, order_id):
     order = get_object_or_404(Order, pk=order_id, user=request.user)
     return render(request, 'payment/paypal.html', {'order': order})
 
+
 def payment_fondy(request, order_id):
     order = get_object_or_404(Order, pk=order_id, user=request.user)
     return render(request, 'payment/fondy.html', {'order': order})
+
 
 def payment_liqpay(request, order_id):
     order = get_object_or_404(Order, pk=order_id, user=request.user)
