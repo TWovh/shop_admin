@@ -2,7 +2,7 @@ from django.db.models.functions import TruncDate
 from django.utils.html import format_html
 from django.utils.timezone import make_aware
 
-from shop.models import Order as ShopOrder
+from shop.models import Order as ShopOrder, Order
 from .models import Product, Category, Cart, CartItem, User, NovaPoshtaSettings, ProductImage, OrderItem, PaymentSettings, Payment
 from django.contrib import admin
 from django.urls import reverse
@@ -279,14 +279,65 @@ class OrderItemInline(admin.TabularInline):
     extra = 1  # количество пустых строк
     min_num = 1  # минимум 1 товар
     fields = ('product', 'quantity', 'price')
-    autocomplete_fields = ('product',)
+    autocomplete_fields = ['product']
+
+    def formfield_for_foreignkey(self, db_field, request=None, **kwargs):
+        formfield = super().formfield_for_foreignkey(db_field, request, **kwargs)
+        if db_field.name == "product":
+            formfield.widget.can_add_related = False
+        return formfield
+
+    class Media:
+        js = [
+            'admin/js/jquery.init.js',  # <-- это нужно первым
+            'admin/js/orderitem_auto_price.js',  # <-- ваш скрипт
+        ]
 
 @admin.register(ShopOrder, site=admin_site)
 class DashboardOrderAdmin(admin.ModelAdmin):
-    list_display = ('id', 'user', 'payment_status', 'delivery_type', 'created')
-    list_filter = ('delivery_type', 'payment_status')
-    readonly_fields = ('payment_status_badge', 'payment_actions')
+    list_display = ['id', 'user', 'status', 'payment_status', 'delivery_type', 'created']
+    list_filter = ['status', 'payment_status', 'delivery_type']
+    readonly_fields = ['total_price', 'created', 'updated']
     inlines = [OrderItemInline]
+
+    fieldsets = (
+        (None, {
+            'fields': ('user', 'status', 'payment_status', 'delivery_type')
+        }),
+        ('Контакты', {
+            'fields': ('city', 'address', 'phone', 'email')
+        }),
+        ('Дополнительно', {
+            'fields': ('comments',),
+            'classes': ('collapse',)
+        }),
+        ('Служебные поля', {
+            'fields': ('total_price', 'created', 'updated'),
+            'classes': ('collapse',)
+        }),
+    )
+
+    @admin.action(description="Отметить как оплачен (наложка)")
+    def mark_cod_paid(self, request, queryset):
+        updated = 0
+        for order in queryset:
+            if order.delivery_type == 'cod' and order.status != 'completed':
+                order.payment_status = 'paid'
+                order.status = 'completed'
+                order.save()
+                updated += 1
+        self.message_user(request, f"Обновлено {updated} заказов как 'Оплачен'.", messages.SUCCESS)
+
+    @admin.action(description="Отметить как не оплачено (отмена наложки)")
+    def mark_cod_rejected(self, request, queryset):
+        updated = 0
+        for order in queryset:
+            if order.delivery_type == 'cod' and order.status != 'cancelled':
+                order.payment_status = 'refunded'
+                order.status = 'cancelled'
+                order.save()
+                updated += 1
+        self.message_user(request, f"Обновлено {updated} заказов как 'Отменён'.", messages.WARNING)
 
     def payment_status_badge(self, obj):
         colors = {
@@ -313,11 +364,9 @@ class DashboardOrderAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
-        # Обновил total_price после сохранения заказа
-        total = sum(item.total_price for item in obj.order_items.all())
+        total = sum(item.price * item.quantity for item in obj.order_items.all())
         if obj.total_price != total:
-            obj.total_price = total
-            obj.save()
+            Order.objects.filter(pk=obj.pk).update(total_price=total)
 
 @admin.register(Category, site=admin_site)
 class DashboardCategoryAdmin(admin.ModelAdmin):

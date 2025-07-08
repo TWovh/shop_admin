@@ -94,13 +94,14 @@ class CartItemSerializer(serializers.ModelSerializer):
     def get_total_price(self, obj):
         return obj.product.price * obj.quantity
 
-class CreateOrderSerializer(serializers.Serializer):
-    address = serializers.CharField()
-    phone = serializers.CharField()
-    email = serializers.EmailField()
-    city = serializers.CharField()
-    delivery_type = serializers.ChoiceField(choices=[('prepaid', 'Оплата онлайн'), ('cod', 'Наложенный платеж')], default='prepaid')
-    comments = serializers.CharField(required=False, allow_blank=True)
+class OrderCreateSerializer(serializers.Serializer):
+    address = serializers.CharField(required=True)
+    phone = serializers.CharField(required=True)
+    email = serializers.EmailField(required=True)
+    city = serializers.CharField(required=True)
+    delivery_type = serializers.ChoiceField(choices=[('prepaid', 'Оплата онлайн'), ('cod', 'Наложенный платеж')],
+                                            default='prepaid')
+    comments = serializers.CharField(required=False, allow_blank=True, default='')
 
 
 class UserSerializer(serializers.ModelSerializer):

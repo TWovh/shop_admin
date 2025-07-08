@@ -3,11 +3,10 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import ListView, DetailView
 from django.contrib.auth import get_user_model, authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
-from . import serializers
 from .models import Product, Order, OrderItem
 from rest_framework import generics
 from .serializers import ProductSerializer, CategorySerializer, UserSerializer, RegisterSerializer, \
-                          CurrentUserSerializer
+    CurrentUserSerializer, OrderCreateSerializer
 from .cart_serializers import CartItemSerializer, AddToCartSerializer
 from .models import Category, Cart, CartItem
 from rest_framework import status, viewsets
@@ -23,7 +22,7 @@ from django.core.exceptions import ValidationError
 from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
 from .utils import get_nova_poshta_api_key
-from django.http import JsonResponse, HttpRequest
+from django.http import JsonResponse, HttpRequest, Http404
 import requests
 from shop.admin_dashboard import admin_site
 
@@ -87,15 +86,9 @@ def index(request):
 def statistics_view(request: HttpRequest):
     return admin_site.statistics_view(request)
 
-
-class OrderCreateSerializer(serializers.Serializer):
-    address = serializers.CharField(required=True)
-    phone = serializers.CharField(required=True)
-    email = serializers.EmailField(required=True)
-    city = serializers.CharField(required=True)
-    delivery_type = serializers.ChoiceField(choices=[('prepaid', 'Оплата онлайн'), ('cod', 'Наложенный платеж')],
-                                            default='prepaid')
-    comments = serializers.CharField(required=False, allow_blank=True, default='')
+def get_product_price(request, pk):
+    product = get_object_or_404(Product, pk=pk)
+    return JsonResponse({'price': str(product.price)})
 
 
 class OrderListCreateAPIView(generics.ListCreateAPIView):
@@ -144,7 +137,41 @@ class OrderListCreateAPIView(generics.ListCreateAPIView):
             return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return super().handle_exception(exc)
 
+# апи для наложки
+class MarkCodPaidAPIView(APIView):
+    permission_classes = [IsStaff]
 
+    def post(self, request, pk):
+        try:
+            order = Order.objects.get(pk=pk, delivery_type='cod')
+        except Order.DoesNotExist:
+            return Response({"detail": "Заказ не найден или не наложка."}, status=404)
+
+        if order.status == 'completed':
+            return Response({"detail": "Заказ уже завершён."}, status=400)
+
+        order.payment_status = 'paid'
+        order.status = 'completed'
+        order.save()
+        return Response({"detail": f"Заказ #{pk} отмечен как оплачен."})
+
+
+class MarkCodRejectedAPIView(APIView):
+    permission_classes = [IsStaff]
+
+    def post(self, request, pk):
+        try:
+            order = Order.objects.get(pk=pk, delivery_type='cod')
+        except Order.DoesNotExist:
+            return Response({"detail": "Заказ не найден или не наложка."}, status=404)
+
+        if order.status == 'cancelled':
+            return Response({"detail": "Заказ уже отменён."}, status=400)
+
+        order.payment_status = 'refunded'
+        order.status = 'cancelled'
+        order.save()
+        return Response({"detail": f"Заказ #{pk} отменён как не оплаченный."})
 
 
 class OrderListView(LoginRequiredMixin, ListView):

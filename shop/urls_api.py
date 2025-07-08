@@ -10,7 +10,7 @@ from .views import (
     AddToCartView,
     OrderListCreateAPIView,
     OrderDetailAPIView,
-    ClearCartView, RegisterView, CurrentUserView, LoginView,
+    ClearCartView, RegisterView, CurrentUserView, LoginView, MarkCodRejectedAPIView, MarkCodPaidAPIView,
 )
 from .views_payments import CreatePaymentView, StripeWebhookView
 from . import views
@@ -38,6 +38,9 @@ api_urlpatterns = [
     # Новая Почта
     path("np/cities/", views.get_cities, name="np_get_cities"),
     path("np/warehouses/", views.get_warehouses, name="np_get_warehouses"),
+    path('orders/<int:pk>/mark-cod-paid/', MarkCodPaidAPIView.as_view(), name='mark_cod_paid'),
+    path('orders/<int:pk>/mark-cod-rejected/', MarkCodRejectedAPIView.as_view(), name='mark_cod_rejected'),
+
 
     #Авторизация
     path('auth/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
