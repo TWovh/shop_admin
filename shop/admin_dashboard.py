@@ -295,10 +295,20 @@ class OrderItemInline(admin.TabularInline):
 
 @admin.register(ShopOrder, site=admin_site)
 class DashboardOrderAdmin(admin.ModelAdmin):
-    list_display = ['id', 'user', 'status', 'payment_status', 'delivery_type', 'created']
+    list_display = [
+        'id',
+        'view_link',
+        'user',
+        'status',
+        'payment_status_badge',
+        'delivery_type',
+        'total_price_display',
+        'created'
+    ]
     list_filter = ['status', 'payment_status', 'delivery_type']
     readonly_fields = ['total_price', 'created', 'updated']
     inlines = [OrderItemInline]
+    actions = ['mark_cod_paid', 'mark_cod_rejected']
 
     fieldsets = (
         (None, {
@@ -317,27 +327,52 @@ class DashboardOrderAdmin(admin.ModelAdmin):
         }),
     )
 
+    def row_actions(self, obj):
+        buttons = []
+        if obj.delivery_type == 'cod' and obj.payment_status != 'paid':
+            pay_url = (
+                    reverse('admin:shop_order_changelist') +
+                    f'?action=mark_cod_paid&select_across=0&_selected_action={obj.pk}'
+            )
+            buttons.append(f'<a class="button" href="{pay_url}">Оплачен</a>')
+        if obj.delivery_type == 'cod' and obj.payment_status != 'refunded':
+            cancel_url = (
+                    reverse('admin:shop_order_changelist') +
+                    f'?action=mark_cod_rejected&select_across=0&_selected_action={obj.pk}'
+            )
+            buttons.append(f'<a class="button" href="{cancel_url}">Отменён</a>')
+        return format_html(' '.join(buttons)) if buttons else '-'
+
+    row_actions.short_description = 'Статус наложки'
+    row_actions.allow_tags = True
+
+    def total_price_display(self, obj):
+        return f"{obj.total_price:.2f} Грн"
+
+    total_price_display.short_description = 'Сумма заказа'
+    total_price_display.admin_order_field = 'total_price'
+
     @admin.action(description="Отметить как оплачен (наложка)")
     def mark_cod_paid(self, request, queryset):
         updated = 0
         for order in queryset:
-            if order.delivery_type == 'cod' and order.status != 'completed':
+            if order.delivery_type == 'cod' and order.payment_status != 'paid':
                 order.payment_status = 'paid'
                 order.status = 'completed'
                 order.save()
                 updated += 1
-        self.message_user(request, f"Обновлено {updated} заказов как 'Оплачен'.", messages.SUCCESS)
+        self.message_user(request, f"Обновлено {updated} заказов как «Оплачен».", messages.SUCCESS)
 
     @admin.action(description="Отметить как не оплачено (отмена наложки)")
     def mark_cod_rejected(self, request, queryset):
         updated = 0
         for order in queryset:
-            if order.delivery_type == 'cod' and order.status != 'cancelled':
+            if order.delivery_type == 'cod' and order.payment_status != 'refunded':
                 order.payment_status = 'refunded'
                 order.status = 'cancelled'
                 order.save()
                 updated += 1
-        self.message_user(request, f"Обновлено {updated} заказов как 'Отменён'.", messages.WARNING)
+        self.message_user(request, f"Обновлено {updated} заказов как «Отменён».", messages.WARNING)
 
     def payment_status_badge(self, obj):
         colors = {
@@ -352,6 +387,8 @@ class DashboardOrderAdmin(admin.ModelAdmin):
             obj.get_payment_status_display()
         )
     payment_status_badge.short_description = 'Статус оплаты'
+    payment_status_badge.admin_order_field = 'payment_status'
+
 
     def payment_actions(self, obj):
         if obj.id and obj.payment_status == 'unpaid':
@@ -361,6 +398,13 @@ class DashboardOrderAdmin(admin.ModelAdmin):
             )
         return '-'
     payment_actions.short_description = 'Действия'
+
+    def view_link(self, obj):
+        url = reverse('admin:shop_order_change', args=[obj.pk])
+        return format_html('<a class="button" href="{}">Просмотр</a>', url)
+
+    view_link.short_description = 'Подробнее'
+    view_link.allow_tags = True
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
