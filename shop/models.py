@@ -379,10 +379,11 @@ class PaymentSettings(models.Model):
         default='stripe',
         verbose_name='Платежная система'
     )
-    is_active = models.BooleanField(default=True, verbose_name='Активна')
+    is_active = models.BooleanField(default=False, verbose_name='Активна')
     _api_key = models.CharField(max_length=255, verbose_name='API ключ (зашифрован)', blank=True)
     _secret_key = models.CharField(max_length=255, verbose_name='Секретный ключ (зашифрован)', blank=True)
     _webhook_secret = models.CharField(max_length=255, blank=True, null=True, verbose_name='Секрет вебхука (зашифрован)')
+    _sandbox = models.BooleanField(default=True, verbose_name='Песочница (sandbox)')
 
     @property
     def api_key(self):
@@ -408,7 +409,11 @@ class PaymentSettings(models.Model):
     def webhook_secret(self, value):
         self._webhook_secret = signing.dumps(value)
 
-    # Сохраняем оригинальные значения в памяти для админки
+    @property
+    def sandbox(self):
+        return self._sandbox
+
+    # Оригинальные значения для сравнения при save
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.__original_api_key = self.api_key
@@ -416,7 +421,6 @@ class PaymentSettings(models.Model):
         self.__original_webhook_secret = self.webhook_secret
 
     def save(self, *args, **kwargs):
-        # Шифруем только если значение изменилось
         if self.api_key != self.__original_api_key:
             self._api_key = signing.dumps(self.api_key)
         if self.secret_key != self.__original_secret_key:
@@ -429,13 +433,6 @@ class PaymentSettings(models.Model):
         self.__original_secret_key = self.secret_key
         self.__original_webhook_secret = self.webhook_secret
 
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Дата создания')
-
-    class Meta:
-        ordering = ['-created_at']
-        verbose_name = 'Настройка платежей'
-        verbose_name_plural = 'Настройки платежей'
-
     def clean(self):
         if not self.api_key:
             raise ValidationError("API ключ не может быть пустым.")
@@ -444,8 +441,15 @@ class PaymentSettings(models.Model):
         if self.payment_system == 'stripe' and not self.webhook_secret:
             raise ValidationError("Webhook секрет обязателен для Stripe.")
 
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Дата создания')
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Настройка платежей'
+        verbose_name_plural = 'Настройки платежей'
+
     def __str__(self):
-        return f"{self.get_payment_system_display()} ({'активна' if self.is_active else 'неактивна'})"
+        return f"{self.get_payment_system_display()} Settings"
 
 
 class Payment(models.Model):
@@ -464,13 +468,23 @@ class Payment(models.Model):
         verbose_name='Пользователь'
     )
 
+    PAYMENT_SYSTEM_CHOICES = [
+        ('stripe', 'Stripe'),
+        ('paypal', 'PayPal'),
+        ('fondy', 'Fondy'),
+        ('liqpay', 'LiqPay'),
+        ('portmone', 'Portmone'),
+    ]
+
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='payments')
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     external_id = models.CharField(max_length=255, blank=True, null=True)
+    raw_response = models.JSONField(blank=True, null=True)
+    payment_system = models.CharField(max_length=20, choices=PAYMENT_SYSTEM_CHOICES)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    raw_response = models.JSONField(blank=True, null=True)
 
     class Meta:
         verbose_name = 'Платеж'
@@ -480,7 +494,7 @@ class Payment(models.Model):
         ]
 
     def __str__(self):
-        return f"Платеж #{self.id} для заказа {self.order.id}"
+        return f"{self.get_payment_system_display()} | {self.amount} грн | {self.get_status_display()}"
 
 
 

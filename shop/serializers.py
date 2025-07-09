@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
-from .models import Product, Category, Order, OrderItem, CartItem, ProductImage
+from .models import Product, Category, Order, OrderItem, CartItem, ProductImage, PaymentSettings
 from rest_framework.serializers import Serializer
 from rest_framework.reverse import reverse
 from rest_framework.exceptions import ValidationError
@@ -132,3 +132,9 @@ class CurrentUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ('id', 'email', 'phone', 'role')
+
+
+class PaymentSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PaymentSettings
+        fields = ['payment_system', 'is_active']

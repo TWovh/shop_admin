@@ -1,0 +1,9 @@
+{% extends "admin/change_form.html" %}
+
+{% block content %}
+  {{ block.super }}
+
+  <div style="margin-top: 20px; font-weight: bold; font-size: 1.2em;">
+    Сумма заказа: <span id="order-total">0.00</span> грн
+  </div>
+{% endblock %}

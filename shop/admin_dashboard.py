@@ -1,20 +1,16 @@
 from django.db.models.functions import TruncDate
 from django.utils.html import format_html
-from django.utils.timezone import make_aware
-
-from shop.models import Order as ShopOrder, Order
+from django.utils.timezone import make_aware, now
+from shop.models import Order as ShopOrder
 from .models import Product, Category, Cart, CartItem, User, NovaPoshtaSettings, ProductImage, OrderItem, PaymentSettings, Payment
 from django.contrib import admin
 from django.urls import reverse
-from django.shortcuts import HttpResponseRedirect
 from django.db.models import F, DecimalField, Sum, Count, Avg
 from django.utils import timezone
 from datetime import timedelta, datetime
 from django.core.paginator import Paginator
 from django.template.response import TemplateResponse
 from django.contrib.auth.admin import UserAdmin
-from django.contrib.admin.forms import AdminAuthenticationForm
-from django.core.exceptions import ValidationError
 from django.contrib.admin.models import LogEntry
 from django.contrib import messages
 from django import forms
@@ -97,79 +93,100 @@ class AdminDashboard(admin.AdminSite):
         return super().index(request, extra_context)
 
     def statistics_view(self, request):
-        try:
-            start_date = request.GET.get('start_date')
-            end_date = request.GET.get('end_date')
+        # Инициализируем переменные
+        start_date = request.GET.get('start_date')
+        end_date = request.GET.get('end_date')
+        start_dt = end_dt = None
 
-            total_sales = 0
-            avg_order = 0
-            orders_count = 0
-            product_sales_by_day = []
+        # Базовый QuerySet по заказам
+        orders_qs = ShopOrder.objects.all()
 
-            orders = ShopOrder.objects.all()
-            if start_date:
+        # Фильтрация по датам, если заданы
+        if start_date:
+            try:
                 start_dt = make_aware(datetime.strptime(start_date, '%Y-%m-%d'))
-                orders = orders.filter(created__gte=start_dt)
-            if end_date:
+                orders_qs = orders_qs.filter(created__gte=start_dt)
+            except ValueError:
+                messages.error(request, "Неверный формат начала периода")
+        if end_date:
+            try:
                 end_dt = make_aware(datetime.strptime(end_date, '%Y-%m-%d'))
-                orders = orders.filter(created__lte=end_dt)
+                orders_qs = orders_qs.filter(created__lte=end_dt)
+            except ValueError:
+                messages.error(request, "Неверный формат окончания периода")
 
-            if start_date and end_date:
-                total_sales = orders.aggregate(total=Sum('total_price'))['total'] or 0
-                avg_order = orders.aggregate(avg=Avg('total_price'))['avg'] or 0
-                orders_count = orders.count()
+        # Подсчёт основных метрик
+        total_sales = avg_order = orders_count = 0
+        product_sales_by_day = []
+        if start_dt and end_dt:
+            total_sales = orders_qs.aggregate(total=Sum('total_price'))['total'] or 0
+            avg_order = orders_qs.aggregate(avg=Avg('total_price'))['avg'] or 0
+            orders_count = orders_qs.count()
 
-                product_sales_by_day = (
-                    OrderItem.objects
-                    .filter(order__created__range=(start_dt, end_dt))
-                    .annotate(date=TruncDate('order__created'))
-                    .values('product__name', 'date')
-                    .annotate(total=Sum(F('price') * F('quantity'), output_field=DecimalField()))
-                    .order_by('date')
+            product_sales_by_day = (
+                OrderItem.objects
+                .filter(order__created__range=(start_dt, end_dt))
+                .annotate(date=TruncDate('order__created'))
+                .values('product__name', 'date')
+                .annotate(
+                    total=Sum(
+                        F('price') * F('quantity'),
+                        output_field=DecimalField()
+                    )
                 )
-
-            paginator = Paginator(orders, 25)
-            page_obj = paginator.get_page(request.GET.get('page'))
-
-            categories_stats = Category.objects.annotate(
-                total_sales=Sum('products__orderitem__price')
-            ).exclude(total_sales=None).order_by('-total_sales')
-
-            raw_stats = Payment.objects.filter(
-                created_at__gte=timezone.now() - timedelta(days=30)
-            ).values('status').annotate(
-                count=Count('id'), total=Sum('amount')
+                .order_by('date')
             )
 
-            # Словарь отображаемых значений статусов
-            STATUS_DISPLAY = dict(Payment.STATUS_CHOICES)
+        # Пагинация списка заказов
+        paginator = Paginator(orders_qs.order_by('-created'), 25)
+        page_obj = paginator.get_page(request.GET.get('page'))
 
-            payment_stats = [
-                {
-                    'status': stat['status'],
-                    'status_display': STATUS_DISPLAY.get(stat['status'], stat['status']),
-                    'count': stat['count'],
-                    'total': stat['total'] or 0
-                }
-                for stat in raw_stats
-            ]
-            context = self.each_context(request)
-            context.update({
-                'title': 'Статистика продаж',
-                'orders_count': orders_count,
-                'recent_orders': orders.order_by('-created')[:10],
-                'categories_stats': categories_stats,
-                'payment_stats': payment_stats,
-                'payment_total': Payment.objects.aggregate(total=Sum('amount'))['total'] or 0,
-                'total_sales': total_sales,
-                'avg_order': avg_order,
-                'page_obj': page_obj,
-                'product_sales_by_day': product_sales_by_day,
-            })
-            return TemplateResponse(request, 'admin/statistics.html', context)
-        except Exception as e:
-            messages.error(request, f"Ошибка: {str(e)}")
-            return HttpResponseRedirect(reverse('myadmin:index'))
+        # Статистика по категориям
+        categories_stats = (
+            Category.objects
+            .annotate(total_sales=Sum('products__orderitem__price'))
+            .exclude(total_sales__isnull=True)
+            .order_by('-total_sales')
+        )
+
+        # Статистика платежей за последние 30 дней
+        recent_payments = (
+            Payment.objects
+            .filter(created_at__gte=now() - timedelta(days=30))
+            .values('status')
+            .annotate(count=Count('id'), total=Sum('amount'))
+        )
+        STATUS_DISPLAY = dict(Payment.STATUS_CHOICES)
+        payment_stats = [
+            {
+                'status': row['status'],
+                'display': STATUS_DISPLAY.get(row['status'], row['status']),
+                'count': row['count'],
+                'total': row['total'] or 0
+            }
+            for row in recent_payments
+        ]
+        overall_payment_total = Payment.objects.aggregate(total=Sum('amount'))['total'] or 0
+
+        # Сбор контекста и рендер
+        context = self.each_context(request)
+        context.update({
+            'title': 'Статистика продаж',
+            'start_date': start_date,
+            'end_date': end_date,
+            'total_sales': total_sales,
+            'avg_order': avg_order,
+            'orders_count': orders_count,
+            'page_obj': page_obj,
+            'recent_orders': orders_qs[:10],
+            'product_sales_by_day': product_sales_by_day,
+            'categories_stats': categories_stats,
+            'payment_stats': payment_stats,
+            'payment_total_30d': sum(item['total'] for item in payment_stats),
+            'overall_payment_total': overall_payment_total,
+        })
+
+        return TemplateResponse(request, 'admin/statistics.html', context)
 
     def get_app_list(self, request, app_label=None):
         from django.urls import NoReverseMatch
@@ -295,6 +312,17 @@ class OrderItemInline(admin.TabularInline):
 
 @admin.register(ShopOrder, site=admin_site)
 class DashboardOrderAdmin(admin.ModelAdmin):
+    change_form_template = "admin/shop/order/change_form.html"
+    add_form_template = "admin/shop/order/add_form.html"
+
+    def get_changeform_template(self, request, obj=None, **kwargs):
+        return "admin/shop/order/change_form.html"
+
+    def add_view(self, request, form_url='', extra_context=None):
+        extra_context = extra_context or {}
+        extra_context['is_add_view'] = True
+        return super().add_view(request, form_url, extra_context=extra_context)
+
     list_display = [
         'id',
         'view_link',
@@ -407,10 +435,21 @@ class DashboardOrderAdmin(admin.ModelAdmin):
     view_link.allow_tags = True
 
     def save_model(self, request, obj, form, change):
+        # Сохраняем сам объект заказа без попытки считать инлайны
         super().save_model(request, obj, form, change)
-        total = sum(item.price * item.quantity for item in obj.order_items.all())
-        if obj.total_price != total:
-            Order.objects.filter(pk=obj.pk).update(total_price=total)
+
+    def save_related(self, request, form, formsets, change):
+        # 1) Сначала сохраняем все инлайны (OrderItem)
+        super().save_related(request, form, formsets, change)
+
+        # 2) Пересчитываем итоговую сумму по уже сохранённым инлайнам
+        total = sum(
+            item.price * item.quantity
+            for item in form.instance.order_items.all()
+        )
+
+        # 3) Обновляем поле total_price в базе
+        ShopOrder.objects.filter(pk=form.instance.pk).update(total_price=total)
 
 @admin.register(Category, site=admin_site)
 class DashboardCategoryAdmin(admin.ModelAdmin):
@@ -510,12 +549,6 @@ class CartItemAdmin(admin.ModelAdmin):
     total_price.short_description = 'Сумма'
 
 
-class CustomAdminAuthForm(AdminAuthenticationForm):
-    def confirm_login_allowed(self, user):
-        super().confirm_login_allowed(user)
-        if user.role not in ['ADMIN', 'STAFF']:
-            raise ValidationError("Доступ запрещен.")
-
 @admin.register(LogEntry, site=admin_site)
 class LogEntryAdmin(admin.ModelAdmin):
     list_display = ['action_time', 'user', 'content_type', 'object_repr', 'action_flag']
@@ -608,10 +641,14 @@ class PaymentSettingsAdmin(admin.ModelAdmin):
 
 @admin.register(Payment, site=admin_site)
 class PaymentAdmin(admin.ModelAdmin):
-    list_display = ('id', 'order_link', 'amount', 'status', 'created_at')
-    list_filter = ('status', 'created_at')
+    list_display = ('id', 'order_link', 'payment_system', 'amount', 'status', 'created_at')
+    list_filter = ('payment_system', 'status', 'created_at')
     search_fields = ('order__id', 'external_id')
     readonly_fields = ('created_at', 'updated_at', 'raw_response')
+
+    def order(self, obj):
+        return obj.order.id
+    order.short_description = 'Заказ'
 
     def order_link(self, obj):
         url = reverse('myadmin:shop_order_change', args=[obj.order.id])

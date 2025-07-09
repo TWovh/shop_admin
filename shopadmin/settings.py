@@ -8,14 +8,40 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv()
 SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = True
-STRIPE_API_KEY = os.getenv('STRIPE_API_KEY')
-STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
-STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET')
 
-CORS_ALLOWED_ORIGINS = ["http://localhost:5173",]
-CSRF_TRUSTED_ORIGINS = ["http://localhost:5173",]
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
+STRIPE_API_KEY = os.getenv("STRIPE_API_KEY")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",  # React dev
+    "https://yourfrontend.com",  # боевой фронт
+]
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:5173",
+    "https://yourfrontend.com",
+]
+
 ALLOWED_HOSTS = []
 AUTH_USER_MODEL = 'shop.User'
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+
+SECURE_SSL_REDIRECT = False  # в проде поменять на True
+
+X_FRAME_OPTIONS = 'DENY'
+# Безопасность куки
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+
+# Куки нельзя прочитать из JS
+SESSION_COOKIE_HTTPONLY = True
+CSRF_COOKIE_HTTPONLY = False  # CSRF токен читается React-ом (JS)
+
+# Не передаются с других сайтов
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = 'Lax'
+# Разрешаем браузеру слать куки
 CORS_ALLOW_CREDENTIALS = True
 
 
@@ -131,9 +157,12 @@ REST_FRAMEWORK = {
 }
 
 SIMPLE_JWT = {
-    'AUTH_HEADER_TYPES': ("Bearer",),
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=5),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
 }
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -176,13 +205,6 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Директория для collectstatic
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
-SESSION_COOKIE_SECURE = False
-CSRF_COOKIE_SECURE = False
-SECURE_BROWSER_XSS_FILTER = True
-SECURE_CONTENT_TYPE_NOSNIFF = True
-SESSION_COOKIE_SAMESITE = 'Lax'
-SECURE_SSL_REDIRECT = False
-CSRF_COOKIE_SAMESITE = 'Lax'
-X_FRAME_OPTIONS = 'DENY'
+
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')

@@ -22,7 +22,7 @@ from django.core.exceptions import ValidationError
 from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
 from .utils import get_nova_poshta_api_key
-from django.http import JsonResponse, HttpRequest, Http404
+from django.http import JsonResponse, HttpRequest
 import requests
 from shop.admin_dashboard import admin_site
 

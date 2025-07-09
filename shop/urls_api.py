@@ -12,7 +12,8 @@ from .views import (
     OrderDetailAPIView,
     ClearCartView, RegisterView, CurrentUserView, LoginView, MarkCodRejectedAPIView, MarkCodPaidAPIView,
 )
-from .views_payments import CreatePaymentView, StripeWebhookView
+from .views_payments import CreatePaymentView, StripeWebhookView, PaymentMethodsView, PaymentOptionsAPIView, \
+    ActivePaymentSystemsView
 from . import views
 
 router = DefaultRouter()
@@ -34,6 +35,9 @@ api_urlpatterns = [
     # Оплата
     path('orders/<int:order_id>/pay/', CreatePaymentView.as_view(), name='create-payment'),
     path('webhooks/stripe/', StripeWebhookView.as_view(), name='stripe-webhook'),
+    path('payment-methods/', PaymentMethodsView.as_view(), name='payment-methods'),
+    path('payments/options/', PaymentOptionsAPIView.as_view(), name='payment-options'),#для фронта
+    path('api/payment-systems/', ActivePaymentSystemsView.as_view(), name='active-payment-systems'), #только актив
 
     # Новая Почта
     path("np/cities/", views.get_cities, name="np_get_cities"),
