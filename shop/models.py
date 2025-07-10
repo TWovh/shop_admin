@@ -328,6 +328,17 @@ class Order(models.Model):
         verbose_name = 'Заказ'
         verbose_name_plural = 'Заказы'
 
+    def payment_info(self):
+        last_payment = self.payments.filter(status='paid').last()
+        if last_payment:
+            return {
+                "system": last_payment.get_payment_system_display(),
+                "amount": last_payment.amount,
+                "invoice": last_payment.external_id,
+                "details": last_payment.raw_response
+            }
+        return None
+
     def can_be_modified(self):
         return self.status in ['new', 'processing']
 
@@ -492,6 +503,16 @@ class Payment(models.Model):
         indexes = [
             models.Index(fields=['external_id', 'status']),
         ]
+
+    def get_invoice_info(self):
+        return {
+            "payment_system": self.get_payment_system_display(),
+            "external_id": self.external_id,
+            "status": self.status,
+            "amount": self.amount,
+            "created_at": self.created_at,
+            "raw": self.raw_response,
+        }
 
     def __str__(self):
         return f"{self.get_payment_system_display()} | {self.amount} грн | {self.get_status_display()}"

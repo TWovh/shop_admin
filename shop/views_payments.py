@@ -1,18 +1,21 @@
+import base64
+import hashlib
+import json
+
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
+from rest_framework.generics import RetrieveAPIView
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status
 from django.conf import settings
+from .clients import StripeClient, PayPalClient, FondyClient, LiqPayClient, PortmoneClient
 from .models import PaymentSettings, Payment, Order
 import stripe
 from .permissions import IsAdminOrUser
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
-from decimal import Decimal
 import logging
-
-from .serializers import PaymentSettingsSerializer
+from .serializers import PaymentSettingsSerializer, PaymentMethodSerializer, PaymentDetailSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -20,72 +23,82 @@ class CreatePaymentView(APIView):
     permission_classes = [IsAdminOrUser]
 
     def post(self, request, order_id):
+        payment_system = request.data.get('payment_system')
+
         try:
             order = Order.objects.get(id=order_id, user=request.user)
-            if order.status != 'pending':
-                return Response({'error': 'Заказ не может быть оплачен'}, status=400)
-
-            if Payment.objects.filter(order=order, status='paid').exists():
-                return Response({'error': 'Уже оплачен'}, status=400)
-
-            payment_settings = PaymentSettings.objects.filter(is_active=True).first()
-            if not payment_settings:
-                return Response({'error': 'Нет настроенной платежной системы'}, status=400)
-
-            system = payment_settings.payment_system
-            if system == 'stripe':
-                return self.create_stripe(order, payment_settings)
-            elif system == 'paypal':
-                return self.create_paypal(order, payment_settings)
-            elif system == 'fondy':
-                return self.create_fondy(order, payment_settings)
-            elif system == 'liqpay':
-                return self.create_liqpay(order, payment_settings)
-
-            return Response({'error': 'Неподдерживаемая система'}, status=400)
-
         except Order.DoesNotExist:
             return Response({'error': 'Заказ не найден'}, status=404)
 
-    def create_stripe(self, order, settings):
-        import stripe
-        stripe.api_key = settings.secret_key
+        if order.status != 'pending':
+            return Response({'error': 'Заказ не может быть оплачен'}, status=400)
 
-        session = stripe.checkout.Session.create(
-            payment_method_types=['card'],
-            line_items=[{
-                'price_data': {
-                    'currency': 'uah',
-                    'product_data': {'name': f'Заказ #{order.id}'},
-                    'unit_amount': int(order.total_price * 100),
-                },
-                'quantity': 1,
-            }],
-            mode='payment',
-            success_url=f'{settings.SITE_URL}/orders/{order.id}/success/',
-            cancel_url=f'{settings.SITE_URL}/orders/{order.id}/cancel/',
-            metadata={'order_id': order.id}
-        )
+        if Payment.objects.filter(order=order, status='paid').exists():
+            return Response({'error': 'Заказ уже оплачен'}, status=400)
 
-        Payment.objects.create(
+        if not payment_system:
+            return Response({'error': 'Не указана платежная система'}, status=400)
+
+        try:
+            payment_settings = PaymentSettings.objects.get(payment_system=payment_system, is_active=True)
+        except PaymentSettings.DoesNotExist:
+            return Response({'error': 'Платежная система неактивна или не настроена'}, status=400)
+
+        raw = None
+        system = payment_system
+        if system == 'stripe':
+            client = StripeClient(payment_settings)
+            ext_id, url = client.create_checkout(order)
+        elif system == 'paypal':
+            client = PayPalClient(payment_settings)
+            ext_id, url, raw = client.create_order(order)
+        elif system == 'fondy':
+            client = FondyClient(payment_settings)
+            ext_id, url, raw = client.create_payment(order)
+        elif system == 'liqpay':
+            client = LiqPayClient(payment_settings)
+            data_b64, sign = client.create_form(order)
+            # сохраним raw = {data, sign}
+            raw = {'data': data_b64, 'signature': sign}
+            # вернём оба параметра фронту
+            ext_id = order.id
+            url = client.API_URL
+        elif system == 'portmone':
+            client = PortmoneClient(payment_settings)
+            ext_id, url, raw = client.create_payment(order)
+        else:
+            return Response({'error': 'Unsupported'}, status=400)
+
+        payment = Payment.objects.create(
             order=order,
+            user=self.request.user,
             amount=order.total_price,
-            external_id=session.id,
-            payment_system='stripe',
-            raw_response=session,
+            payment_system=system,
+            external_id=ext_id,
+            raw_response=raw or {},
             status='pending'
         )
 
-        return Response({'payment_url': session.url})
+        if system == 'liqpay':
+            return Response({
+                'checkout_url': url,
+                'data': raw['data'],
+                'signature': raw['signature']
+            })
 
-    def create_paypal(self, order, settings):
-        return Response({'payment_url': f'https://www.sandbox.paypal.com/checkoutnow?token=FAKE-PAYPAL-TOKEN-{order.id}'})
+        return Response({'payment_url': url})
 
-    def create_fondy(self, order, settings):
-        return Response({'payment_url': f'https://pay.fondy.eu/sandbox/pay/FONDY-MOCK-ID-{order.id}'})
 
-    def create_liqpay(self, order, settings):
-        return Response({'payment_url': f'https://www.liqpay.ua/sandbox/checkout?order_id={order.id}'})
+
+
+
+class PaymentDetailView(RetrieveAPIView):
+    queryset = Payment.objects.all()
+    serializer_class = PaymentDetailSerializer
+    permission_classes = [IsAdminOrUser]
+
+    def get_queryset(self):
+        return super().get_queryset().filter(user=self.request.user)
 
 #для админки
 class PaymentMethodsView(APIView):
@@ -123,6 +136,13 @@ class ActivePaymentSystemsView(APIView):
         active_payments = PaymentSettings.objects.filter(is_active=True)
         serializer = PaymentSettingsSerializer(active_payments, many=True)
         return Response(serializer.data)
+
+class ActivePaymentMethodsAPIView(APIView):
+    def get(self, request):
+        active_settings = PaymentSettings.objects.filter(is_active=True)
+        serializer = PaymentMethodSerializer(active_settings, many=True)
+        return Response(serializer.data)
+
 
 @method_decorator(csrf_exempt, name='dispatch')
 class StripeWebhookView(APIView):
@@ -208,3 +228,131 @@ class StripeWebhookView(APIView):
             [settings.ADMIN_EMAIL],
             html_message=html_message
         )
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class FondyWebhookView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request, *args, **kwargs):
+        data = request.data.get('response') or request.data
+        order_id = data.get('order_id')
+        payment_id = data.get('payment_id')
+        status = data.get('order_status')
+
+        if status != 'approved':
+            return Response({'status': 'ignored'}, status=200)
+
+        try:
+            payment = Payment.objects.get(order__id=order_id, external_id=payment_id)
+            payment.status = 'paid'
+            payment.save()
+
+            order = payment.order
+            order.status = 'paid'
+            order.save()
+
+            # по желанию
+            # self.send_payment_success_email(payment)
+
+            return Response({'status': 'success'})
+        except Payment.DoesNotExist:
+            return Response({'error': 'Payment not found'}, status=404)
+
+@method_decorator(csrf_exempt, name='dispatch')
+class PayPalWebhookView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request, *args, **kwargs):
+        event = request.data
+        resource = event.get('resource', {})
+        event_type = event.get('event_type')
+
+        if event_type == 'CHECKOUT.ORDER.APPROVED':
+            external_id = resource.get('id')
+            try:
+                payment = Payment.objects.get(external_id=external_id)
+                payment.status = 'paid'
+                payment.save()
+
+                order = payment.order
+                order.status = 'paid'
+                order.save()
+
+                return Response({'status': 'success'})
+            except Payment.DoesNotExist:
+                return Response({'error': 'Payment not found'}, status=404)
+        return Response({'status': 'ignored'})
+
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class LiqPayWebhookView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request, *args, **kwargs):
+        data_b64 = request.data.get('data')
+        signature = request.data.get('signature')
+
+        if not data_b64 or not signature:
+            return Response({'error': 'Invalid payload'}, status=400)
+
+        private_key = settings.LIQPAY_PRIVATE_KEY
+        expected_signature = base64.b64encode(
+            hashlib.sha1((private_key + data_b64 + private_key).encode()).digest()
+        ).decode()
+
+        if signature != expected_signature:
+            return Response({'error': 'Invalid signature'}, status=400)
+
+        data_json = base64.b64decode(data_b64).decode('utf-8')
+        data = json.loads(data_json)
+
+        if data.get('status') != 'success':
+            return Response({'status': 'ignored'}, status=200)
+
+        order_id = data.get('order_id')
+
+        try:
+            payment = Payment.objects.get(order__id=order_id)
+            payment.status = 'paid'
+            payment.save()
+
+            order = payment.order
+            order.status = 'paid'
+            order.save()
+
+            return Response({'status': 'success'})
+        except Payment.DoesNotExist:
+            return Response({'error': 'Payment not found'}, status=404)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class PortmoneWebhookView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request, *args, **kwargs):
+        data = request.data
+        order_id = data.get('order_id')
+        status = data.get('status')
+        payment_id = data.get('payment_id')
+
+        if status != 'PAYED':
+            return Response({'status': 'ignored'})
+
+        try:
+            payment = Payment.objects.get(order__id=order_id, external_id=payment_id)
+            payment.status = 'paid'
+            payment.save()
+
+            order = payment.order
+            order.status = 'paid'
+            order.save()
+
+            return Response({'status': 'success'})
+        except Payment.DoesNotExist:
+            return Response({'error': 'Payment not found'}, status=404)

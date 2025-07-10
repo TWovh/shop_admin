@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
-from .models import Product, Category, Order, OrderItem, CartItem, ProductImage, PaymentSettings
+from .models import Product, Category, Order, OrderItem, CartItem, ProductImage, PaymentSettings, Payment
 from rest_framework.serializers import Serializer
 from rest_framework.reverse import reverse
 from rest_framework.exceptions import ValidationError
@@ -138,3 +138,23 @@ class PaymentSettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = PaymentSettings
         fields = ['payment_system', 'is_active']
+
+
+class PaymentMethodSerializer(serializers.ModelSerializer):
+    sandbox = serializers.BooleanField(source='sandbox')
+    title = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PaymentSettings
+        fields = ['payment_system', 'is_active', 'sandbox', 'title']
+
+    def get_title(self, obj):
+        return obj.get_payment_system_display()
+
+class PaymentDetailSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Payment
+        fields = [
+            'id', 'payment_system', 'external_id', 'status',
+            'amount', 'created_at', 'raw_response'
+        ]

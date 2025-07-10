@@ -38,6 +38,7 @@ api_urlpatterns = [
     path('payment-methods/', PaymentMethodsView.as_view(), name='payment-methods'),
     path('payments/options/', PaymentOptionsAPIView.as_view(), name='payment-options'),#для фронта
     path('api/payment-systems/', ActivePaymentSystemsView.as_view(), name='active-payment-systems'), #только актив
+    path('payment-methods/active/', ActivePaymentMethodsAPIView.as_view(), name='active-payment-methods'),
 
     # Новая Почта
     path("np/cities/", views.get_cities, name="np_get_cities"),

@@ -1,26 +1,19 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Заказ оплачен</title>
+    <meta charset="utf-8">
+    <title>Успешная оплата</title>
 </head>
 <body>
-    <h2>Ваш заказ успешно оплачен!</h2>
-    <p>Номер заказа: <strong>#{{ order.id }}</strong></p>
-    <p>Сумма оплаты: <strong>{{ payment.amount }} UAH</strong></p>
-    <p>Дата оплаты: <strong>{{ payment.created_at|date:"d.m.Y H:i" }}</strong></p>
+    <h2>Спасибо за оплату!</h2>
+    <p>Ваш заказ №{{ order.id }} успешно оплачен.</p>
+    <p><strong>Дата:</strong> {{ payment.created_at }}</p>
+    <p><strong>Сумма:</strong> {{ payment.amount }} UAH</p>
+    <p><strong>Метод оплаты:</strong> {{ payment.payment_system|upper }}</p>
+    <p>Вы можете просмотреть детали заказа по ссылке:</p>
+    <p><a href="{{ site_url }}/profile/orders/{{ order.id }}/">Перейти к заказу</a></p>
 
-    <h3>Детали заказа:</h3>
-    <ul>
-        {% for item in order.order_items.all %}
-        <li>{{ item.product.name }} - {{ item.quantity }} шт. x {{ item.price }} ₽</li>
-        {% endfor %}
-    </ul>
-
-    <p>Сумма заказа: {{ order.total_price }} UAH</p>
-
-    <p>Вы можете отслеживать статус заказа в <a href="{{ site_url }}/account/orders/">личном кабинете</a>.</p>
-
-    <p>С уважением,<br>
-    Команда {{ site_name }}</p>
+    <hr>
+    <p>Если у вас возникли вопросы, свяжитесь с нами по почте: support@example.com</p>
 </body>
 </html>

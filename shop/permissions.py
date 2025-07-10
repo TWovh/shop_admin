@@ -46,11 +46,14 @@ class IsAdminOrUser(CustomPermission):
 
 
 class IsOwnerOrAdmin(CustomPermission):
+    allowed_roles = ['ADMIN']
+
     def has_permission(self, request, view):
-        return super().has_permission(request, view)
+        # Разрешаем доступ только аутентифицированным
+        return request.user.is_authenticated
 
     def has_object_permission(self, request, view, obj):
-        # Сначала — проверка на роль администратора
+        # Админ всегда может
         if request.user_role == 'ADMIN':
             return True
 
@@ -58,6 +61,7 @@ class IsOwnerOrAdmin(CustomPermission):
         if hasattr(obj, 'user'):
             return obj.user == request.user
 
+        # Для других моделей с корзиной (если нужно)
         if hasattr(obj, 'cart') and hasattr(obj.cart, 'user'):
             return obj.cart.user == request.user
 

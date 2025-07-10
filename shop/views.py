@@ -92,7 +92,7 @@ def get_product_price(request, pk):
 
 
 class OrderListCreateAPIView(generics.ListCreateAPIView):
-    permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
+    permission_classes = [IsOwnerOrAdmin]
     serializer_class = OrderSerializer
     throttle_classes = [UserRateThrottle]
 

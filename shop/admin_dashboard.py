@@ -434,6 +434,12 @@ class DashboardOrderAdmin(admin.ModelAdmin):
     view_link.short_description = 'Подробнее'
     view_link.allow_tags = True
 
+    def payment_method(self, obj):
+        payment = obj.payments.filter(status='paid').last()
+        return payment.get_payment_system_display() if payment else "—"
+
+    payment_method.short_description = "Оплачено через"
+
     def save_model(self, request, obj, form, change):
         # Сохраняем сам объект заказа без попытки считать инлайны
         super().save_model(request, obj, form, change)
