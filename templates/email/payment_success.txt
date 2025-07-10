@@ -1,17 +1,10 @@
-Ваш заказ успешно оплачен!
+Спасибо за оплату!
 
-Номер заказа: #{{ order.id }}
-Сумма оплаты: {{ payment.amount }} UAH
-Дата оплаты: {{ payment.created_at|date:"d.m.Y H:i" }}
+Ваш заказ №{{ order.id }} успешно оплачен.
+Дата: {{ payment.created_at }}
+Сумма: {{ payment.amount }} UAH
+Метод оплаты: {{ payment.payment_system|upper }}
 
-Детали заказа:
-{% for item in order.order_items.all %}
-- {{ item.product.name }} - {{ item.quantity }} шт. x {{ item.price }} ₽
-{% endfor %}
+Детали заказа: {{ site_url }}/profile/orders/{{ order.id }}/
 
-Сумма заказа: {{ order.total_price }} UAH
-
-Вы можете отслеживать статус заказа в личном кабинете: {{ site_url }}/account/orders/
-
-С уважением,
-Команда {{ site_name }}
+Если у вас возникли вопросы — support@example.com
