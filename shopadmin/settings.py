@@ -22,7 +22,7 @@ CSRF_TRUSTED_ORIGINS = [
     "https://yourfrontend.com",
 ]
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 AUTH_USER_MODEL = 'shop.User'
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True

@@ -431,22 +431,3 @@ def get_warehouses(request):
     response = requests.post("https://api.novaposhta.ua/v2.0/json/", json=payload)
     return JsonResponse(response.json())
 
-
-def payment_stripe(request, order_id):
-    order = get_object_or_404(Order, pk=order_id, user=request.user)
-    return render(request, 'payment/stripe.html', {'order': order})
-
-
-def payment_paypal(request, order_id):
-    order = get_object_or_404(Order, pk=order_id, user=request.user)
-    return render(request, 'payment/paypal.html', {'order': order})
-
-
-def payment_fondy(request, order_id):
-    order = get_object_or_404(Order, pk=order_id, user=request.user)
-    return render(request, 'payment/fondy.html', {'order': order})
-
-
-def payment_liqpay(request, order_id):
-    order = get_object_or_404(Order, pk=order_id, user=request.user)
-    return render(request, 'payment/liqpay.html', {'order': order})

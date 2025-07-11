@@ -10,10 +10,17 @@ from .views import (
     AddToCartView,
     OrderListCreateAPIView,
     OrderDetailAPIView,
-    ClearCartView, RegisterView, CurrentUserView, LoginView, MarkCodRejectedAPIView, MarkCodPaidAPIView,
+    ClearCartView,
+    RegisterView,
+    CurrentUserView,
+    LoginView,
+    MarkCodRejectedAPIView,
+    MarkCodPaidAPIView,
 )
-from .views_payments import CreatePaymentView, StripeWebhookView, PaymentMethodsView, PaymentOptionsAPIView, \
-    ActivePaymentSystemsView
+from .views_payments import CreatePaymentView, PaymentMethodsView, PaymentOptionsAPIView, \
+    ActivePaymentSystemsView, ActivePaymentMethodsAPIView, stripe_webhook, PayPalWebhookView, FondyWebhookView, \
+    LiqPayWebhookView, PortmoneWebhookView
+
 from . import views
 
 router = DefaultRouter()
@@ -34,11 +41,17 @@ api_urlpatterns = [
 
     # Оплата
     path('orders/<int:order_id>/pay/', CreatePaymentView.as_view(), name='create-payment'),
-    path('webhooks/stripe/', StripeWebhookView.as_view(), name='stripe-webhook'),
     path('payment-methods/', PaymentMethodsView.as_view(), name='payment-methods'),
     path('payments/options/', PaymentOptionsAPIView.as_view(), name='payment-options'),#для фронта
     path('api/payment-systems/', ActivePaymentSystemsView.as_view(), name='active-payment-systems'), #только актив
     path('payment-methods/active/', ActivePaymentMethodsAPIView.as_view(), name='active-payment-methods'),
+    path('stripe/webhook/', stripe_webhook, name='stripe-webhook'),
+    path('paypal/', PayPalWebhookView.as_view(), name='paypal'),
+    path('fondy/', FondyWebhookView.as_view(), name='fondy'),
+    path('liqpay/', LiqPayWebhookView.as_view(), name='liqpay'),
+    path('portmone/', PortmoneWebhookView.as_view(), name='portmone'),
+
+
 
     # Новая Почта
     path("np/cities/", views.get_cities, name="np_get_cities"),

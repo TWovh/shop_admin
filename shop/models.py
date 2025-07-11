@@ -390,11 +390,12 @@ class PaymentSettings(models.Model):
         default='stripe',
         verbose_name='Платежная система'
     )
+
     is_active = models.BooleanField(default=False, verbose_name='Активна')
     _api_key = models.CharField(max_length=255, verbose_name='API ключ (зашифрован)', blank=True)
     _secret_key = models.CharField(max_length=255, verbose_name='Секретный ключ (зашифрован)', blank=True)
     _webhook_secret = models.CharField(max_length=255, blank=True, null=True, verbose_name='Секрет вебхука (зашифрован)')
-    _sandbox = models.BooleanField(default=True, verbose_name='Песочница (sandbox)')
+    is_sandbox = models.BooleanField(default=True, verbose_name='Песочница (sandbox)')
 
     @property
     def api_key(self):
@@ -480,6 +481,7 @@ class Payment(models.Model):
     )
 
     PAYMENT_SYSTEM_CHOICES = [
+        ('manual', 'Manual'),
         ('stripe', 'Stripe'),
         ('paypal', 'PayPal'),
         ('fondy', 'Fondy'),
@@ -492,7 +494,7 @@ class Payment(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     external_id = models.CharField(max_length=255, blank=True, null=True)
     raw_response = models.JSONField(blank=True, null=True)
-    payment_system = models.CharField(max_length=20, choices=PAYMENT_SYSTEM_CHOICES)
+    payment_system = models.CharField(max_length=20, choices=PAYMENT_SYSTEM_CHOICES, default='manual')
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

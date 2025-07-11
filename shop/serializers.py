@@ -141,12 +141,11 @@ class PaymentSettingsSerializer(serializers.ModelSerializer):
 
 
 class PaymentMethodSerializer(serializers.ModelSerializer):
-    sandbox = serializers.BooleanField(source='sandbox')
     title = serializers.SerializerMethodField()
 
     class Meta:
         model = PaymentSettings
-        fields = ['payment_system', 'is_active', 'sandbox', 'title']
+        fields = ['payment_system', 'is_active', 'is_sandbox', 'title']
 
     def get_title(self, obj):
         return obj.get_payment_system_display()

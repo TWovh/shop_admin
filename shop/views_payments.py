@@ -1,8 +1,7 @@
 import base64
 import hashlib
 import json
-
-from django.utils.decorators import method_decorator
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.views import APIView
@@ -90,8 +89,6 @@ class CreatePaymentView(APIView):
 
 
 
-
-
 class PaymentDetailView(RetrieveAPIView):
     queryset = Payment.objects.all()
     serializer_class = PaymentDetailSerializer
@@ -144,151 +141,99 @@ class ActivePaymentMethodsAPIView(APIView):
         return Response(serializer.data)
 
 
-@method_decorator(csrf_exempt, name='dispatch')
-class StripeWebhookView(APIView):
+
+def _handle_successful_payment(system, order_id, external_id, raw_data):
+    try:
+        order = Order.objects.get(id=order_id)
+        payment = Payment.objects.filter(order=order, payment_system=system).first()
+        if payment:
+            payment.status = 'paid'
+            payment.external_id = external_id
+            payment.raw_response = raw_data
+            payment.save()
+        else:
+            Payment.objects.create(
+                order=order,
+                user=order.user,
+                amount=order.total_price,
+                payment_system=system,
+                external_id=external_id,
+                raw_response=raw_data,
+                status='paid'
+            )
+        order.status = 'paid'
+        order.save()
+    except Exception as e:
+        logger.error(f"Ошибка обработки оплаты {system}: {e}")
+
+
+@csrf_exempt
+def stripe_webhook(request):
+    import stripe
+    payment_settings = PaymentSettings.objects.filter(payment_system='stripe', is_active=True).first()
+    if not payment_settings:
+        return JsonResponse({'error': 'No active Stripe settings'}, status=400)
+
+    webhook_secret = "test_secret" if payment_settings.sandbox else payment_settings.webhook_secret
+    stripe.api_key = "test_key" if payment_settings.sandbox else payment_settings.secret_key
+
+    payload = request.body
+    sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
+    try:
+        event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+    if event['type'] == 'checkout.session.completed':
+        session = event['data']['object']
+        order_id = session['metadata']['order_id']
+        _handle_successful_payment('stripe', order_id, session['id'], session)
+
+    return HttpResponse(status=200)
+
+
+class PayPalWebhookView(APIView):
     authentication_classes = []
     permission_classes = []
 
     def post(self, request, *args, **kwargs):
-        payload = request.body
-        sig_header = request.META.get('HTTP_STRIPE_SIGNATURE', '')
-        webhook_secret = settings.STRIPE_WEBHOOK_SECRET  #
+        data = request.data
+        payment_settings = PaymentSettings.objects.filter(payment_system='paypal', is_active=True).first()
+        if not payment_settings:
+            return JsonResponse({'error': 'No active PayPal settings'}, status=400)
 
-        try:
-            event = stripe.Webhook.construct_event(
-                payload, sig_header, webhook_secret
-            )
-        except ValueError as e:
-            return Response({'error': 'Invalid payload'}, status=400)
-        except stripe.error.SignatureVerificationError as e:
-            return Response({'error': 'Invalid signature'}, status=400)
+        order_id = data.get('resource', {}).get('purchase_units', [{}])[0].get('reference_id')
+        payment_id = data.get('resource', {}).get('id')
 
-        # Обработка успешной оплаты
-        if event['type'] == 'checkout.session.completed':
-            session = event['data']['object']
-            order_id = session['metadata'].get('order_id')
-            session_id = session['id']
-
-            try:
-                payment = Payment.objects.get(external_id=session_id)
-                if str(payment.order.id) != str(order_id):
-                    return Response({'error': 'Несоответствие order_id'}, status=400)
-
-                payment.status = 'paid'
-                payment.save()
-                try:
-                    self.send_payment_success_email(payment)
-                except Exception as e:
-                    # логируй ошибку или отправь в sentry
-                    pass
-
-                # можно обновить заказ, если нужно
-                order = payment.order
-                order.status = 'paid'  # если у тебя есть статус
-                order.save()
+        _handle_successful_payment('paypal', order_id, payment_id, data)
+        return Response({'status': 'success'})
 
 
-            except Payment.DoesNotExist:
-                return Response({'error': 'Платёж не найден'}, status=404)
-
-
-        return Response({'status': 'success'}, status=200)
-
-    def send_payment_success_email(self, payment):
-        subject = f"Заказ #{payment.order.id} успешно оплачен"
-
-        # Инвойс
-        context = {
-            'order': payment.order,
-            'payment': payment,
-            'site_url': settings.SITE_URL
-        }
-
-        # HTML версия письма
-        html_message = render_to_string('email/payment_success.html', context)
-
-        # Текстовая версия письма
-        plain_message = render_to_string('email/payment_success.txt', context)
-
-        # Отправка покупателю
-        send_mail(
-            subject,
-            plain_message,
-            settings.DEFAULT_FROM_EMAIL,
-            [payment.order.email],
-            html_message=html_message
-        )
-
-        # Отправка администратору
-        admin_subject = f"Новый оплаченный заказ #{payment.order.id}"
-        send_mail(
-            admin_subject,
-            plain_message,
-            settings.DEFAULT_FROM_EMAIL,
-            [settings.ADMIN_EMAIL],
-            html_message=html_message
-        )
-
-
-@method_decorator(csrf_exempt, name='dispatch')
 class FondyWebhookView(APIView):
     authentication_classes = []
     permission_classes = []
 
     def post(self, request, *args, **kwargs):
         data = request.data.get('response') or request.data
-        order_id = data.get('order_id')
-        payment_id = data.get('payment_id')
-        status = data.get('order_status')
+        payment_settings = PaymentSettings.objects.filter(payment_system='fondy', is_active=True).first()
+        if not payment_settings:
+            return JsonResponse({'error': 'No active Fondy settings'}, status=400)
 
-        if status != 'approved':
-            return Response({'status': 'ignored'}, status=200)
+        secret = "test_secret" if payment_settings.sandbox else payment_settings.secret_key
 
-        try:
-            payment = Payment.objects.get(order__id=order_id, external_id=payment_id)
-            payment.status = 'paid'
-            payment.save()
+        sign_fields = ['order_id', 'merchant_id', 'amount', 'currency', 'order_status']
+        sign_string = '|'.join(data[k] for k in sign_fields) + f"|{secret}"
+        signature = hashlib.sha1(sign_string.encode()).hexdigest()
 
-            order = payment.order
-            order.status = 'paid'
-            order.save()
+        if data.get('signature') != signature:
+            return Response({'error': 'Invalid signature'}, status=400)
 
-            # по желанию
-            # self.send_payment_success_email(payment)
+        if data.get('order_status') == 'approved':
+            _handle_successful_payment('fondy', data['order_id'], data['payment_id'], data)
 
-            return Response({'status': 'success'})
-        except Payment.DoesNotExist:
-            return Response({'error': 'Payment not found'}, status=404)
-
-@method_decorator(csrf_exempt, name='dispatch')
-class PayPalWebhookView(APIView):
-    authentication_classes = []
-    permission_classes = []
-
-    def post(self, request, *args, **kwargs):
-        event = request.data
-        resource = event.get('resource', {})
-        event_type = event.get('event_type')
-
-        if event_type == 'CHECKOUT.ORDER.APPROVED':
-            external_id = resource.get('id')
-            try:
-                payment = Payment.objects.get(external_id=external_id)
-                payment.status = 'paid'
-                payment.save()
-
-                order = payment.order
-                order.status = 'paid'
-                order.save()
-
-                return Response({'status': 'success'})
-            except Payment.DoesNotExist:
-                return Response({'error': 'Payment not found'}, status=404)
-        return Response({'status': 'ignored'})
+        return Response({'status': 'success'})
 
 
-
-@method_decorator(csrf_exempt, name='dispatch')
 class LiqPayWebhookView(APIView):
     authentication_classes = []
     permission_classes = []
@@ -296,63 +241,44 @@ class LiqPayWebhookView(APIView):
     def post(self, request, *args, **kwargs):
         data_b64 = request.data.get('data')
         signature = request.data.get('signature')
+        payment_settings = PaymentSettings.objects.filter(payment_system='liqpay', is_active=True).first()
+        if not payment_settings:
+            return JsonResponse({'error': 'No active LiqPay settings'}, status=400)
 
-        if not data_b64 or not signature:
-            return Response({'error': 'Invalid payload'}, status=400)
+        secret = "test_secret" if payment_settings.sandbox else payment_settings.secret_key
 
-        private_key = settings.LIQPAY_PRIVATE_KEY
         expected_signature = base64.b64encode(
-            hashlib.sha1((private_key + data_b64 + private_key).encode()).digest()
+            hashlib.sha1(f"{secret}{data_b64}{secret}".encode()).digest()
         ).decode()
 
         if signature != expected_signature:
             return Response({'error': 'Invalid signature'}, status=400)
 
-        data_json = base64.b64decode(data_b64).decode('utf-8')
-        data = json.loads(data_json)
+        decoded_data = json.loads(base64.b64decode(data_b64).decode())
+        if decoded_data.get('status') == 'success':
+            _handle_successful_payment('liqpay', decoded_data['order_id'], decoded_data['payment_id'], decoded_data)
 
-        if data.get('status') != 'success':
-            return Response({'status': 'ignored'}, status=200)
-
-        order_id = data.get('order_id')
-
-        try:
-            payment = Payment.objects.get(order__id=order_id)
-            payment.status = 'paid'
-            payment.save()
-
-            order = payment.order
-            order.status = 'paid'
-            order.save()
-
-            return Response({'status': 'success'})
-        except Payment.DoesNotExist:
-            return Response({'error': 'Payment not found'}, status=404)
+        return Response({'status': 'success'})
 
 
-@method_decorator(csrf_exempt, name='dispatch')
 class PortmoneWebhookView(APIView):
     authentication_classes = []
     permission_classes = []
 
     def post(self, request, *args, **kwargs):
         data = request.data
-        order_id = data.get('order_id')
-        status = data.get('status')
-        payment_id = data.get('payment_id')
+        payment_settings = PaymentSettings.objects.filter(payment_system='portmone', is_active=True).first()
+        if not payment_settings:
+            return JsonResponse({'error': 'No active Portmone settings'}, status=400)
 
-        if status != 'PAYED':
-            return Response({'status': 'ignored'})
+        secret = "test_secret" if payment_settings.sandbox else payment_settings.secret_key
+        sign_data = '|'.join(str(data[k]) for k in sorted(data) if k != 'signature') + f"|{secret}"
+        expected_signature = hashlib.sha1(sign_data.encode()).hexdigest()
 
-        try:
-            payment = Payment.objects.get(order__id=order_id, external_id=payment_id)
-            payment.status = 'paid'
-            payment.save()
+        if data.get('signature') != expected_signature:
+            return Response({'error': 'Invalid signature'}, status=400)
 
-            order = payment.order
-            order.status = 'paid'
-            order.save()
+        if data.get('status') == 'success':
+            _handle_successful_payment('portmone', data['order_id'], data['payment_id'], data)
 
-            return Response({'status': 'success'})
-        except Payment.DoesNotExist:
-            return Response({'error': 'Payment not found'}, status=404)
+        return Response({'status': 'success'})

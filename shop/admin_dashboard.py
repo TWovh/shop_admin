@@ -5,6 +5,7 @@ from shop.models import Order as ShopOrder
 from .models import Product, Category, Cart, CartItem, User, NovaPoshtaSettings, ProductImage, OrderItem, PaymentSettings, Payment
 from django.contrib import admin
 from django.urls import reverse
+from django.db import models
 from django.db.models import F, DecimalField, Sum, Count, Avg
 from django.utils import timezone
 from datetime import timedelta, datetime
@@ -616,33 +617,45 @@ class PaymentSettingsForm(forms.ModelForm):
 @admin.register(PaymentSettings, site=admin_site)
 class PaymentSettingsAdmin(admin.ModelAdmin):
     form = PaymentSettingsForm
-    list_display = ('payment_system', 'is_active', 'get_created_at')
-    list_editable = ('is_active',)
+    list_display = ('payment_system', 'is_active', 'is_sandbox', 'get_created_at')
+    list_editable = ('is_active', 'is_sandbox')
+    actions = ['test_connection']
+
     fieldsets = (
         (None, {
-            'fields': ('payment_system', 'is_active')
+            'fields': ('payment_system', 'is_active', 'is_sandbox')
         }),
         ('API Ключи', {
             'fields': ('api_key', 'secret_key', 'webhook_secret'),
-            'description': 'Получить ключи можно в личном кабинете платежной системы. Видны только при редактировании'
+            'description': 'Получить ключи можно в личном кабинете платёжной системы. Видны только при редактировании'
         }),
     )
-
-    actions = ['test_connection']
 
     def get_created_at(self, obj):
         return obj.created_at.strftime("%d.%m.%Y %H:%M")
 
-    get_created_at.admin_order_field = 'created_at'  # Разрешаем сортировку
+    get_created_at.admin_order_field = 'created_at'
     get_created_at.short_description = 'Создан'
+
+    def formfield_for_choice_field(self, db_field, request, **kwargs):
+        if db_field.name == "payment_system":
+            kwargs["choices"] = [
+                choice for choice in db_field.choices if choice[0] != "manual"
+            ]
+        return super().formfield_for_choice_field(db_field, request, **kwargs)
 
     def test_connection(self, request, queryset):
         for settings in queryset:
-            success, message = test_payment_connection(settings)
+            try:
+                success, message = test_payment_connection(settings)
+            except Exception as e:
+                success = False
+                message = f"Ошибка: {str(e)}"
             level = messages.SUCCESS if success else messages.ERROR
             self.message_user(request, f"{settings.get_payment_system_display()}: {message}", level)
 
     test_connection.short_description = "Проверить подключение к платёжной системе"
+
 
 
 @admin.register(Payment, site=admin_site)
