@@ -4,6 +4,8 @@ import json
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.generics import RetrieveAPIView
+from rest_framework.permissions import AllowAny
+from rest_framework.renderers import JSONRenderer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.conf import settings
@@ -11,12 +13,11 @@ from .clients import StripeClient, PayPalClient, FondyClient, LiqPayClient, Port
 from .models import PaymentSettings, Payment, Order
 import stripe
 from .permissions import IsAdminOrUser
-from django.core.mail import send_mail
-from django.template.loader import render_to_string
 import logging
 from .serializers import PaymentSettingsSerializer, PaymentMethodSerializer, PaymentDetailSerializer
 
 logger = logging.getLogger(__name__)
+stripe.api_key = settings.STRIPE_SECRET_KEY
 
 class CreatePaymentView(APIView):
     permission_classes = [IsAdminOrUser]
@@ -190,6 +191,15 @@ def stripe_webhook(request):
         _handle_successful_payment('stripe', order_id, session['id'], session)
 
     return HttpResponse(status=200)
+
+class StripePublicKeyView(APIView):
+    permission_classes = [AllowAny]
+    renderer_classes = [JSONRenderer]
+
+    def get(self, request):
+        return Response({
+            "publicKey": settings.STRIPE_API_KEY  # безопасно возвращаем
+        })
 
 
 class PayPalWebhookView(APIView):

@@ -106,7 +106,6 @@ class OrderListCreateAPIView(generics.ListCreateAPIView):
         if not cart.items.exists():
             raise ValidationError("Корзина пуста")
 
-        # Валидируем входящие данные через сериализатор
         order_data_serializer = OrderCreateSerializer(data=self.request.data)
         order_data_serializer.is_valid(raise_exception=True)
         validated_data = order_data_serializer.validated_data
@@ -130,12 +129,40 @@ class OrderListCreateAPIView(generics.ListCreateAPIView):
         order.save()
         return order
 
+    def create(self, request, *args, **kwargs):
+        # Создаём заказ через perform_create
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        order = self.perform_create(serializer)
+
+        # Сериализуем созданный заказ для ответа
+        response_serializer = self.get_serializer(order)
+
+        headers = self.get_success_headers(response_serializer.data)
+        return Response({
+            'order': response_serializer.data,
+            'order_id': order.id,
+            'message': 'Заказ успешно создан'
+        }, status=status.HTTP_201_CREATED, headers=headers)
+
     def handle_exception(self, exc):
         from django.core.exceptions import ValidationError as DjangoValidationError
 
         if isinstance(exc, (Cart.DoesNotExist, ValidationError, DjangoValidationError)):
             return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return super().handle_exception(exc)
+
+
+
+
+class LatestOrderView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        latest_order = Order.objects.filter(user=request.user).order_by('-created_at').first()
+        if latest_order:
+            return Response({'id': latest_order.id})
+        return Response({'error': 'Заказ не найден'}, status=404)
 
 # апи для наложки
 class MarkCodPaidAPIView(APIView):

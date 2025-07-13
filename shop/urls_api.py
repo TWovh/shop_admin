@@ -15,11 +15,11 @@ from .views import (
     CurrentUserView,
     LoginView,
     MarkCodRejectedAPIView,
-    MarkCodPaidAPIView,
+    MarkCodPaidAPIView, LatestOrderView,
 )
 from .views_payments import CreatePaymentView, PaymentMethodsView, PaymentOptionsAPIView, \
     ActivePaymentSystemsView, ActivePaymentMethodsAPIView, stripe_webhook, PayPalWebhookView, FondyWebhookView, \
-    LiqPayWebhookView, PortmoneWebhookView
+    LiqPayWebhookView, PortmoneWebhookView, StripePublicKeyView
 
 from . import views
 
@@ -38,6 +38,7 @@ api_urlpatterns = [
     # Заказы
     path('orders/', OrderListCreateAPIView.as_view(), name='order-list-create'),
     path('orders/<int:order_id>/', OrderDetailAPIView.as_view(), name='order-detail'),
+    path('orders/latest/', LatestOrderView.as_view(), name='latest-order'),
 
     # Оплата
     path('orders/<int:order_id>/pay/', CreatePaymentView.as_view(), name='create-payment'),
@@ -47,6 +48,7 @@ api_urlpatterns = [
     path('payment-methods/active/', ActivePaymentMethodsAPIView.as_view(), name='active-payment-methods'),
     path('stripe/webhook/', stripe_webhook, name='stripe-webhook'),
     path('paypal/', PayPalWebhookView.as_view(), name='paypal'),
+    path('stripe/public-key/', StripePublicKeyView.as_view(), name='stripe-public-key'),
     path('fondy/', FondyWebhookView.as_view(), name='fondy'),
     path('liqpay/', LiqPayWebhookView.as_view(), name='liqpay'),
     path('portmone/', PortmoneWebhookView.as_view(), name='portmone'),
