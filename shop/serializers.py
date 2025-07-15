@@ -84,7 +84,7 @@ class AddToCartSerializer(serializers.Serializer):
     quantity = serializers.IntegerField(min_value=1, max_value=100)
 
 class CartItemSerializer(serializers.ModelSerializer):
-    product = ProductSerializer(read_only=True)  # Вложенный сериализатор продукта
+    product = ProductSerializer(read_only=True)
     total_price = serializers.SerializerMethodField()
 
     class Meta:

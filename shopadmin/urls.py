@@ -7,7 +7,7 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
     TokenVerifyView
 )
-from shop.views import index, register
+from shop.views import register
 
 
 urlpatterns = [

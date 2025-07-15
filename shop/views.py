@@ -7,7 +7,7 @@ from .models import Product, Order, OrderItem
 from rest_framework import generics
 from .serializers import ProductSerializer, CategorySerializer, UserSerializer, RegisterSerializer, \
     CurrentUserSerializer, OrderCreateSerializer
-from .cart_serializers import CartItemSerializer, AddToCartSerializer
+from .serializers import CartItemSerializer, AddToCartSerializer
 from .models import Category, Cart, CartItem
 from rest_framework import status, viewsets
 from rest_framework.response import Response
@@ -92,7 +92,7 @@ def get_product_price(request, pk):
 
 
 class OrderListCreateAPIView(generics.ListCreateAPIView):
-    permission_classes = [IsOwnerOrAdmin]
+    permission_classes = [IsAuthenticated]
     serializer_class = OrderSerializer
     throttle_classes = [UserRateThrottle]
 
@@ -234,7 +234,7 @@ class CartView(APIView):
                 'total_price': total_price
             })
 
-        serializer = CartItemSerializer(cart_items, many=True)
+        serializer = CartItemSerializer(cart_items, many=True, context={'request': request})
         return Response({
             'items': serializer.data,
             'total_price': total_price
