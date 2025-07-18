@@ -22,13 +22,28 @@ stripe.api_key = settings.STRIPE_SECRET_KEY
 class CreatePaymentView(APIView):
     permission_classes = [IsAdminOrUser]
 
+
     def post(self, request, order_id):
+        print(
+            f"User: {request.user.email}, role: {getattr(request.user, 'role', None)}, user_role: {getattr(request, 'user_role', None)}")
+        print("=== CreatePaymentView ===")
+        print("request.user:", request.user)
+        print("request.user.is_authenticated:", request.user.is_authenticated)
+        print("request.user.role:", getattr(request.user, 'role', None))
+        print("request.user_role (from middleware):", getattr(request, 'user_role', None))
+
         payment_system = request.data.get('payment_system')
 
         try:
             order = Order.objects.get(id=order_id, user=request.user)
+            print(f"Order.user: {order.user}, request.user: {request.user}")
         except Order.DoesNotExist:
             return Response({'error': 'Заказ не найден'}, status=404)
+
+        if order.user != request.user:
+            return Response({'error': 'Нет доступа к заказу'}, status=403)
+
+        print(f"Order status: {order.status}")
 
         if order.status != 'pending':
             return Response({'error': 'Заказ не может быть оплачен'}, status=400)
@@ -47,8 +62,27 @@ class CreatePaymentView(APIView):
         raw = None
         system = payment_system
         if system == 'stripe':
-            client = StripeClient(payment_settings)
-            ext_id, url = client.create_checkout(order)
+            try:
+                client = StripeClient(payment_settings)
+                session_id, url = client.create_checkout(order)
+
+                Payment.objects.create(
+                    order=order,
+                    user=self.request.user,
+                    amount=order.total_price,
+                    payment_system=system,
+                    external_id=session_id,
+                    raw_response={},
+                    status='pending'
+                )
+
+                return Response({'session_id': session_id})
+
+            except Exception as e:
+                print("🔥 Ошибка Stripe:", str(e))
+                import traceback
+                traceback.print_exc()
+                return Response({'error': str(e)}, status=500)
         elif system == 'paypal':
             client = PayPalClient(payment_settings)
             ext_id, url, raw = client.create_order(order)

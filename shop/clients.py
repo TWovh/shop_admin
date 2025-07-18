@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import hmac
 import json
 import requests
 from decimal import Decimal
@@ -24,8 +25,8 @@ class StripeClient:
                 'quantity': 1,
             }],
             mode='payment',
-            success_url=f"{settings.SITE_URL}{reverse('order-success', args=[order.id])}",
-            cancel_url=f"{settings.SITE_URL}{reverse('order-cancel', args=[order.id])}",
+            success_url=f"{settings.FRONTEND_URL}/order-success/{order.id}",
+            cancel_url=f"{settings.FRONTEND_URL}/order-cancel/{order.id}",
             metadata={'order_id': order.id}
         )
         return session.id, session.url

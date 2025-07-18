@@ -195,7 +195,7 @@ class Cart(models.Model):
                 phone=phone,
                 email=email,
                 comments=comments,
-                status='new'
+                status='pending'
             )
 
             order_items = [
@@ -288,7 +288,7 @@ class Order(models.Model):
         self._meta.get_field('total_price').editable = False
 
     STATUS_CHOICES = [
-        ('new', 'Новый'),
+        ('pending', 'В ожидании'),
         ('processing', 'В обработке'),
         ('completed', 'Завершён'),
         ('cancelled', 'Отменён'),
@@ -302,7 +302,7 @@ class Order(models.Model):
 
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='new')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     total_price = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     address = models.TextField()
     phone = models.CharField(max_length=20)
@@ -340,7 +340,7 @@ class Order(models.Model):
         return None
 
     def can_be_modified(self):
-        return self.status in ['new', 'processing']
+        return self.status in ['pending', 'processing']
 
     def calculate_total_price(self):
         return sum(
@@ -423,7 +423,7 @@ class PaymentSettings(models.Model):
 
     @property
     def sandbox(self):
-        return self._sandbox
+        return self.is_sandbox
 
     # Оригинальные значения для сравнения при save
     def __init__(self, *args, **kwargs):
@@ -433,25 +433,23 @@ class PaymentSettings(models.Model):
         self.__original_webhook_secret = self.webhook_secret
 
     def save(self, *args, **kwargs):
-        if self.api_key != self.__original_api_key:
+        # Если api_key есть (не пустая строка), и либо _api_key пустое, либо расшифрованное значение отличается — шифруем и записываем
+        if self.api_key and (not self._api_key or signing.loads(self._api_key) != self.api_key):
             self._api_key = signing.dumps(self.api_key)
-        if self.secret_key != self.__original_secret_key:
+
+        if self.secret_key and (not self._secret_key or signing.loads(self._secret_key) != self.secret_key):
             self._secret_key = signing.dumps(self.secret_key)
-        if self.webhook_secret != self.__original_webhook_secret:
+
+        if self.webhook_secret and (
+                not self._webhook_secret or signing.loads(self._webhook_secret) != self.webhook_secret):
             self._webhook_secret = signing.dumps(self.webhook_secret)
 
         super().save(*args, **kwargs)
+
+        # После сохранения обновляем оригиналы (для последующих сравнений)
         self.__original_api_key = self.api_key
         self.__original_secret_key = self.secret_key
         self.__original_webhook_secret = self.webhook_secret
-
-    def clean(self):
-        if not self.api_key:
-            raise ValidationError("API ключ не может быть пустым.")
-        if not self.secret_key:
-            raise ValidationError("Секретный ключ не может быть пустым.")
-        if self.payment_system == 'stripe' and not self.webhook_secret:
-            raise ValidationError("Webhook секрет обязателен для Stripe.")
 
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Дата создания')
 

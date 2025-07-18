@@ -590,8 +590,8 @@ class PaymentSettingsForm(forms.ModelForm):
         fields = '__all__'
 
     def __init__(self, *args, **kwargs):
+        instance = kwargs.get('instance')  # Получаем до super
         super().__init__(*args, **kwargs)
-        instance = kwargs.get('instance')
         if instance:
             if instance.api_key:
                 self.fields['api_key'].widget.attrs['placeholder'] = '**********'
@@ -603,16 +603,32 @@ class PaymentSettingsForm(forms.ModelForm):
     def save(self, commit=True):
         instance = super().save(commit=False)
 
-        if self.cleaned_data.get('api_key'):
-            instance.api_key = self.cleaned_data['api_key']
-        if self.cleaned_data.get('secret_key'):
-            instance.secret_key = self.cleaned_data['secret_key']
-        if self.cleaned_data.get('webhook_secret'):
-            instance.webhook_secret = self.cleaned_data['webhook_secret']
+        if self.cleaned_data.get('api_key', '').strip():
+            instance.api_key = self.cleaned_data['api_key'].strip()
+        if self.cleaned_data.get('secret_key', '').strip():
+            instance.secret_key = self.cleaned_data['secret_key'].strip()
+        if self.cleaned_data.get('webhook_secret', '').strip():
+            instance.webhook_secret = self.cleaned_data['webhook_secret'].strip()
 
         if commit:
             instance.save()
         return instance
+
+    def clean(self):
+        cleaned_data = super().clean()
+        api_key = cleaned_data.get("api_key") or self.instance._api_key
+        secret_key = cleaned_data.get("secret_key") or self.instance._secret_key
+        webhook_secret = cleaned_data.get("webhook_secret") or self.instance._webhook_secret
+        payment_system = cleaned_data.get("payment_system") or self.instance.payment_system
+
+        if not api_key:
+            raise forms.ValidationError("API ключ не может быть пустым.")
+        if not secret_key:
+            raise forms.ValidationError("Секретный ключ не может быть пустым.")
+        if payment_system == 'stripe' and not webhook_secret:
+            raise forms.ValidationError("Webhook секрет обязателен для Stripe.")
+        return cleaned_data
+
 
 @admin.register(PaymentSettings, site=admin_site)
 class PaymentSettingsAdmin(admin.ModelAdmin):

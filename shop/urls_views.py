@@ -1,7 +1,5 @@
 from django.urls import path
-from . import views
 from .views import (
-    index,
     CartItemDetailView,
     CartView, checkout_view,
     OrderListView,
@@ -13,7 +11,6 @@ from .views import (
 
 app_name = 'shop'
 urlpatterns = [
-    path('', index, name='index'),
     path("admin/statistics/", statistics_view, name="statistics"),
     path('categories/', CategoryListHTMLView.as_view(), name='category-list'),
     path('categories/<int:pk>/', CategoryDetailHTMLView.as_view(), name='category-detail'),
