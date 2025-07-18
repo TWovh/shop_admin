@@ -1,0 +1,52 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# --- Virtual environments ---
+.venv/
+venv/
+ENV/
+env/
+.venv311/
+venv311/
+# --- Django ---
+*.log
+*.pot
+*.pyc
+db.sqlite3
+media/
+staticfiles/
+*.sqlite3
+*.db
+
+# --- Environment variables ---
+.env
+.env.*
+
+# --- IDEs & editors ---
+.idea/
+.vscode/
+
+# --- React frontend ---
+frontend/node_modules/
+frontend/build/
+frontend/.env
+frontend/.env.*  # на случай переменных окружения по режиму
+
+# --- OS junk ---
+.DS_Store
+Thumbs.db
+
+# --- Test, coverage & profiling ---
+.coverage
+.tox/
+.cache/
+.pytest_cache/
+htmlcov/
+coverage.xml
+nosetests.xml
+*.cover
+
