@@ -7,4 +7,36 @@
       <strong>Общая сумма заказа:</strong> {{ original.total_price }} ₽
     </div>
   {% endif %}
+
+  <div style="margin-top: 20px;">
+    <strong>Изменить статус выполнения:</strong>
+    <form method="post" action="">
+      {% csrf_token %}
+      <select name="new_status">
+        {% for value, display in original.STATUS_CHOICES %}
+          <option value="{{ value }}" {% if value == original.status %}selected{% endif %}>{{ display }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit">Сохранить</button>
+    </form>
+  </div>
+{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+  <style>
+    select {
+      padding: 5px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+    }
+    button {
+      padding: 5px 10px;
+      border: none;
+      border-radius: 4px;
+      background-color: #3c8dbc;
+      color: white;
+      margin-left: 10px;
+    }
+  </style>
 {% endblock %}

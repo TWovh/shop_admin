@@ -1,11 +1,16 @@
 from django.db.models.functions import TruncDate
+from django.http import HttpResponseRedirect, JsonResponse
+from django.middleware.csrf import get_token
+from django.utils.decorators import method_decorator
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 from django.utils.timezone import make_aware, now
+from django.views.decorators.csrf import csrf_exempt
+
 from shop.models import Order as ShopOrder
 from .models import Product, Category, Cart, CartItem, User, NovaPoshtaSettings, ProductImage, OrderItem, PaymentSettings, Payment
 from django.contrib import admin
-from django.urls import reverse
-from django.db import models
+from django.urls import reverse, path
 from django.db.models import F, DecimalField, Sum, Count, Avg
 from django.utils import timezone
 from datetime import timedelta, datetime
@@ -265,6 +270,21 @@ class RoleBasedAdmin(admin.ModelAdmin):
                 request.user_role in ['ADMIN', 'STAFF']
         )
 
+class InvoiceFilter(admin.SimpleListFilter):
+    title = 'Инвойс'
+    parameter_name = 'invoice'
+
+    def lookups(self, request, model_admin):
+        from shop.models import Payment
+        invoices = Payment.objects.filter(status='paid').values_list('external_id', flat=True).distinct()
+        return [(inv, inv) for inv in invoices if inv]
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if value:
+            return queryset.filter(payments__external_id=value)
+        return queryset
+
 class ProductImageInline(admin.TabularInline):
     model = ProductImage
     extra = 1
@@ -328,14 +348,16 @@ class DashboardOrderAdmin(admin.ModelAdmin):
         'id',
         'view_link',
         'user',
-        'status',
+        'status_dropdown',
         'payment_status_badge',
         'delivery_type',
         'total_price_display',
+        'invoice_info',
         'created'
     ]
     list_filter = ['status', 'payment_status', 'delivery_type']
     readonly_fields = ['total_price', 'created', 'updated']
+    search_fields = ['id', 'user__email', 'payments__external_id']
     inlines = [OrderItemInline]
     actions = ['mark_cod_paid', 'mark_cod_rejected']
 
@@ -355,6 +377,72 @@ class DashboardOrderAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
+
+    def status_dropdown(self, obj):
+        options = "".join(
+            f"<option value='{key}' {'selected' if obj.status == key else ''}>{label}</option>"
+            for key, label in ShopOrder.STATUS_CHOICES
+        )
+
+        return format_html(
+            f"""
+            <select data-order-id="{obj.id}" class="status-dropdown" style="min-width: 140px;">
+                {options}
+            </select>
+            """
+        )
+
+    status_dropdown.short_description = "Статус заказа"
+
+    class Media:
+        js = ('admin/js/order_status_update.js',)
+
+    def get_urls(self):
+        from django.urls import path
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                'update-status/',
+                self.admin_site.admin_view(self.update_status),
+                name='order_update_status',
+            ),
+        ]
+        return custom_urls + urls
+
+    @method_decorator(csrf_exempt, name='dispatch')
+    def update_status(self, request):
+        if request.method == 'POST' and request.user.is_staff:
+            order_id = request.POST.get('order_id')
+            new_status = request.POST.get('new_status')
+            if not order_id or not new_status:
+                return JsonResponse({'success': False, 'error': 'Missing data'}, status=400)
+
+            try:
+                order = ShopOrder.objects.get(pk=order_id)
+                if new_status in dict(ShopOrder.STATUS_CHOICES):
+                    order.status = new_status
+                    order.save()
+                    return JsonResponse({'success': True, 'status': order.get_status_display()})
+                return JsonResponse({'success': False, 'error': 'Invalid status'}, status=400)
+            except ShopOrder.DoesNotExist:
+                return JsonResponse({'success': False, 'error': 'Order not found'}, status=404)
+        return JsonResponse({'success': False, 'error': 'Invalid request'}, status=400)
+
+    def get_queryset(self, request):
+        self.request = request  # сохраняем для CSRF
+        return super().get_queryset(request)
+
+    def invoice_info(self, obj):
+        payment = obj.payments.filter(status='paid').last()
+        if payment:
+            return format_html(
+                '<div><b>{}</b><br><small style="color: #666;">{}</small></div>',
+                payment.external_id,
+                payment.get_payment_system_display()
+            )
+        return '—'
+
+    invoice_info.short_description = 'Инвойс / Система'
 
     def row_actions(self, obj):
         buttons = []
@@ -418,6 +506,16 @@ class DashboardOrderAdmin(admin.ModelAdmin):
     payment_status_badge.short_description = 'Статус оплаты'
     payment_status_badge.admin_order_field = 'payment_status'
 
+    def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
+        if request.method == 'POST' and 'new_status' in request.POST:
+            obj = self.get_object(request, object_id)
+            if obj:
+                new_status = request.POST.get('new_status')
+                if new_status in dict(ShopOrder.STATUS_CHOICES):
+                    obj.status = new_status
+                    obj.save()
+                    self.message_user(request, f"Статус обновлён на «{obj.get_status_display()}».")
+        return super().changeform_view(request, object_id, form_url, extra_context)
 
     def payment_actions(self, obj):
         if obj.id and obj.payment_status == 'unpaid':
@@ -434,12 +532,6 @@ class DashboardOrderAdmin(admin.ModelAdmin):
 
     view_link.short_description = 'Подробнее'
     view_link.allow_tags = True
-
-    def payment_method(self, obj):
-        payment = obj.payments.filter(status='paid').last()
-        return payment.get_payment_system_display() if payment else "—"
-
-    payment_method.short_description = "Оплачено через"
 
     def save_model(self, request, obj, form, change):
         # Сохраняем сам объект заказа без попытки считать инлайны

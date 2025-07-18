@@ -36,6 +36,12 @@ frontend/build/
 frontend/.env
 frontend/.env.*  # на случай переменных окружения по режиму
 
+# Frontend build
+/frontend/
+node_modules/
+dist/
+build/
+
 # --- OS junk ---
 .DS_Store
 Thumbs.db
@@ -49,4 +55,5 @@ htmlcov/
 coverage.xml
 nosetests.xml
 *.cover
-
+/media/
+/staticfiles/

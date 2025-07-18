@@ -525,6 +525,7 @@ class Payment(models.Model):
         super().save(*args, **kwargs)
 
 
+
 class NovaPoshtaSettings(models.Model):
     api_key = models.CharField(max_length=255, help_text="API ключ my.novaposhta.ua")
     sender_city_ref = models.CharField(max_length=255, blank=True, null=True, help_text="Ref города отправителя")

@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import json
+import os
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.generics import RetrieveAPIView
@@ -199,7 +200,9 @@ def _handle_successful_payment(system, order_id, external_id, raw_data):
         order.status = 'paid'
         order.save()
     except Exception as e:
+        import traceback
         logger.error(f"Ошибка обработки оплаты {system}: {e}")
+        traceback.print_exc()
 
 
 @csrf_exempt
@@ -209,19 +212,38 @@ def stripe_webhook(request):
     if not payment_settings:
         return JsonResponse({'error': 'No active Stripe settings'}, status=400)
 
-    webhook_secret = "test_secret" if payment_settings.sandbox else payment_settings.webhook_secret
-    stripe.api_key = "test_key" if payment_settings.sandbox else payment_settings.secret_key
+    webhook_secret = (
+        os.getenv("STRIPE_WEBHOOK_SECRET_TEST") if payment_settings.sandbox else payment_settings.webhook_secret
+    )
+
+    stripe.api_key = (
+        os.getenv("STRIPE_SECRET_KEY_TEST") if payment_settings.sandbox else payment_settings.secret_key
+    )
 
     payload = request.body
     sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
+
     try:
         event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
     except Exception as e:
+        print("❌ Ошибка Stripe Webhook:", str(e))
         return JsonResponse({'error': str(e)}, status=400)
+
+    print("✅ Stripe webhook пришёл:", event['type'])
 
     if event['type'] == 'checkout.session.completed':
         session = event['data']['object']
-        order_id = session['metadata']['order_id']
+        metadata = session.get('metadata', {})
+
+        print("📦 session.metadata:", metadata)
+
+        order_id = metadata.get('order_id')
+        if not order_id:
+            print("⚠️ Нет order_id в metadata!")
+            return JsonResponse({'error': 'Missing order_id'}, status=400)
+
+        print("👉 order_id из metadata:", order_id)
+        print("🎯 Запускаем _handle_successful_payment")
         _handle_successful_payment('stripe', order_id, session['id'], session)
 
     return HttpResponse(status=200)
