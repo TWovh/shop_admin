@@ -3,10 +3,11 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import ListView, DetailView
 from django.contrib.auth import get_user_model, authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import Product, Order, OrderItem
+from .models import Product, Order, OrderItem, NovaPoshtaSettings
 from rest_framework import generics
 from .serializers import ProductSerializer, CategorySerializer, UserSerializer, RegisterSerializer, \
-    CurrentUserSerializer, OrderCreateSerializer
+    CurrentUserSerializer, OrderCreateSerializer, DashboardOverviewSerializer, DashboardProfileUpdateSerializer, \
+    DashboardOrderListSerializer, DashboardOrderDetailSerializer
 from .serializers import CartItemSerializer, AddToCartSerializer
 from .models import Category, Cart, CartItem
 from rest_framework import status, viewsets
@@ -147,7 +148,7 @@ class LatestOrderView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        latest_order = Order.objects.filter(user=request.user).order_by('-created_at').first()
+        latest_order = Order.objects.filter(user=request.user).order_by('-created').first()
         if latest_order:
             return Response({'id': latest_order.id})
         return Response({'error': 'Заказ не найден'}, status=404)
@@ -316,6 +317,8 @@ class LoginView(APIView):
 
 
 
+def is_nova_poshta_enabled():
+    return NovaPoshtaSettings.objects.filter(is_active=True).exists()
 
 
 def get_cities(request):
@@ -359,3 +362,32 @@ def get_warehouses(request):
     response = requests.post("https://api.novaposhta.ua/v2.0/json/", json=payload)
     return JsonResponse(response.json())
 
+
+class DashboardOverviewView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        serializer = DashboardOverviewSerializer(request.user)
+        return Response(serializer.data)
+
+
+class DashboardProfileUpdateView(generics.UpdateAPIView):
+    serializer_class = DashboardProfileUpdateSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
+
+class DashboardOrderListView(generics.ListAPIView):
+    serializer_class = DashboardOrderListSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Order.objects.filter(user=self.request.user).select_related('user').prefetch_related('items', 'items__product')
+
+class DashboardOrderDetailView(generics.RetrieveAPIView):
+    serializer_class = DashboardOrderDetailSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Order.objects.filter(user=self.request.user)

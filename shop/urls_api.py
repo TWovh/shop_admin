@@ -15,7 +15,8 @@ from .views import (
     CurrentUserView,
     LoginView,
     MarkCodRejectedAPIView,
-    MarkCodPaidAPIView, LatestOrderView,
+    MarkCodPaidAPIView, LatestOrderView, DashboardOverviewView, DashboardProfileUpdateView, DashboardOrderListView,
+    DashboardOrderDetailView,
 )
 from .views_payments import CreatePaymentView, PaymentMethodsView, PaymentOptionsAPIView, \
     ActivePaymentSystemsView, ActivePaymentMethodsAPIView, stripe_webhook, PayPalWebhookView, FondyWebhookView, \
@@ -52,6 +53,13 @@ api_urlpatterns = [
     path('fondy/', FondyWebhookView.as_view(), name='fondy'),
     path('liqpay/', LiqPayWebhookView.as_view(), name='liqpay'),
     path('portmone/', PortmoneWebhookView.as_view(), name='portmone'),
+
+
+    # Личный кабинет
+    path('dashboard/', DashboardOverviewView.as_view(), name='dashboard-overview'),
+    path('dashboard/profile/', DashboardProfileUpdateView.as_view(), name='dashboard-profile-update'),
+    path('dashboard/orders/', DashboardOrderListView.as_view(), name='dashboard-orders'),
+    path('dashboard/orders/<int:pk>/', DashboardOrderDetailView.as_view(), name='dashboard-order-detail'),
 
 
 

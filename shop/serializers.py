@@ -157,3 +157,93 @@ class PaymentDetailSerializer(serializers.ModelSerializer):
             'id', 'payment_system', 'external_id', 'status',
             'amount', 'created_at', 'raw_response'
         ]
+
+
+
+class DashboardOverviewSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    phone = serializers.CharField(allow_blank=True)
+    active_orders_count = serializers.SerializerMethodField()
+    last_order = serializers.SerializerMethodField()
+
+    def get_active_orders_count(self, user):
+        return user.orders.filter(status='processing').count()
+
+    def get_last_order(self, user):
+        last = user.orders.order_by('-created').first()
+        if last:
+            return {
+                'id': last.id,
+                'created_at': last.created_at,
+                'total_price': str(last.total_price),
+                'payment_status': last.payment_status,
+                'status': last.status,
+            }
+        return None
+
+
+class DashboardProfileUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['email', 'phone']
+
+    def validate_email(self, value):
+        user = self.context['request'].user
+        if User.objects.exclude(pk=user.pk).filter(email=value).exists():
+            raise serializers.ValidationError("Email уже используется другим пользователем.")
+        return value
+
+
+class DashboardOrderListSerializer(serializers.ModelSerializer):
+    item_count = serializers.SerializerMethodField()
+    created = serializers.DateTimeField(format="%d.%m.%Y %H:%M")
+    total_price = serializers.DecimalField(max_digits=10, decimal_places=2)
+
+    class Meta:
+        model = Order
+        fields = [
+            'id', 'created', 'status', 'payment_status',
+            'total_price', 'delivery_type', 'item_count'
+        ]
+
+    def get_item_count(self, obj):
+        return obj.items.count()
+
+class DashboardOrderDetailSerializer(serializers.ModelSerializer):
+    items = serializers.SerializerMethodField()
+    delivery_info = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Order
+        fields = [
+            'id', 'created', 'total_price',
+            'payment_status', 'status',
+            'delivery_address', 'delivery_info', 'items'
+        ]
+
+    def get_items(self, obj):
+        return [
+            {
+                'product_name': item.product.name,
+                'quantity': item.quantity,
+                'price': str(item.price),
+                'total': str(item.total_price),
+                'image': item.product.main_image.url if item.product.main_image else None,
+            }
+            for item in obj.items.all()
+        ]
+
+    def get_delivery_info(self, obj):
+        from .models import NovaPoshtaSettings
+
+        if NovaPoshtaSettings.objects.filter(is_active=True).exists() and obj.nova_poshta_data:
+            return {
+                'ttn': obj.nova_poshta_data.get('ttn'),
+                'status': obj.nova_poshta_data.get('status'),
+                'city': obj.nova_poshta_data.get('city'),
+                'warehouse': obj.nova_poshta_data.get('warehouse')
+            }
+        else:
+            return {
+                'status': 'Обрабатывается' if obj.status == 'processing' else 'Не отправлен'
+            }
