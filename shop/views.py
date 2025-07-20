@@ -1,4 +1,3 @@
-from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import ListView, DetailView
 from django.contrib.auth import get_user_model, authenticate
@@ -14,9 +13,9 @@ from rest_framework import status, viewsets
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from .serializers import OrderSerializer
-from django.shortcuts import render, redirect
+from django.shortcuts import render
 from rest_framework.throttling import UserRateThrottle
-from .permissions import IsStaff, IsOwnerOrAdmin, CartThrottle
+from .permissions import IsStaff
 from django.core.exceptions import ValidationError
 from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
@@ -383,11 +382,47 @@ class DashboardOrderListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Order.objects.filter(user=self.request.user).select_related('user').prefetch_related('items', 'items__product')
+        return Order.objects.filter(user=self.request.user).order_by('-created')
+
 
 class DashboardOrderDetailView(generics.RetrieveAPIView):
     serializer_class = DashboardOrderDetailSerializer
     permission_classes = [IsAuthenticated]
+    lookup_field = 'pk'
 
     def get_queryset(self):
         return Order.objects.filter(user=self.request.user)
+
+class DashboardOrderPayView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            order = Order.objects.get(pk=pk, user=request.user)
+        except Order.DoesNotExist:
+            return Response({'detail': 'Заказ не найден'}, status=status.HTTP_404_NOT_FOUND)
+
+        if order.payment_status == 'paid':
+            return Response({'detail': 'Заказ уже оплачен'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # TODO: логика создания платежа и возврат ссылки или параметров
+        payment_url = f'https://payment-gateway.example.com/pay/{order.pk}'
+
+        return Response({'payment_url': payment_url})
+
+
+class DashboardOrderCancelView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            order = Order.objects.get(pk=pk, user=request.user)
+        except Order.DoesNotExist:
+            return Response({'detail': 'Заказ не найден'}, status=status.HTTP_404_NOT_FOUND)
+
+        if order.can_be_modified():
+            order.status = 'cancelled'
+            order.save()
+            return Response({'detail': 'Заказ отменён'})
+        else:
+            return Response({'detail': 'Заказ нельзя отменить'}, status=status.HTTP_400_BAD_REQUEST)

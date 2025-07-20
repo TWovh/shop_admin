@@ -16,7 +16,7 @@ from .views import (
     LoginView,
     MarkCodRejectedAPIView,
     MarkCodPaidAPIView, LatestOrderView, DashboardOverviewView, DashboardProfileUpdateView, DashboardOrderListView,
-    DashboardOrderDetailView,
+    DashboardOrderDetailView, DashboardOrderPayView, DashboardOrderCancelView,
 )
 from .views_payments import CreatePaymentView, PaymentMethodsView, PaymentOptionsAPIView, \
     ActivePaymentSystemsView, ActivePaymentMethodsAPIView, stripe_webhook, PayPalWebhookView, FondyWebhookView, \
@@ -60,6 +60,8 @@ api_urlpatterns = [
     path('dashboard/profile/', DashboardProfileUpdateView.as_view(), name='dashboard-profile-update'),
     path('dashboard/orders/', DashboardOrderListView.as_view(), name='dashboard-orders'),
     path('dashboard/orders/<int:pk>/', DashboardOrderDetailView.as_view(), name='dashboard-order-detail'),
+    path('dashboard/orders/<int:pk>/pay/', DashboardOrderPayView.as_view(), name='dashboard-order-pay'),
+    path('dashboard/orders/<int:pk>/cancel/', DashboardOrderCancelView.as_view(), name='dashboard-order-cancel'),
 
 
 

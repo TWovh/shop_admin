@@ -212,13 +212,14 @@ class DashboardOrderListSerializer(serializers.ModelSerializer):
 class DashboardOrderDetailSerializer(serializers.ModelSerializer):
     items = serializers.SerializerMethodField()
     delivery_info = serializers.SerializerMethodField()
+    payment_info = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
         fields = [
             'id', 'created', 'total_price',
             'payment_status', 'status',
-            'delivery_address', 'delivery_info', 'items'
+            'address', 'delivery_info', 'payment_info', 'items'
         ]
 
     def get_items(self, obj):
@@ -230,7 +231,7 @@ class DashboardOrderDetailSerializer(serializers.ModelSerializer):
                 'total': str(item.total_price),
                 'image': item.product.main_image.url if item.product.main_image else None,
             }
-            for item in obj.items.all()
+            for item in obj.order_items.all()  # или obj.items.all(), в зависимости от related_name
         ]
 
     def get_delivery_info(self, obj):
@@ -247,3 +248,15 @@ class DashboardOrderDetailSerializer(serializers.ModelSerializer):
             return {
                 'status': 'Обрабатывается' if obj.status == 'processing' else 'Не отправлен'
             }
+
+    def get_payment_info(self, obj):
+        return obj.payment_info()
+
+class DashboardOrderItemSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    product_image = serializers.ImageField(source='product.main_image', read_only=True)
+    product_price = serializers.DecimalField(source='product.price', max_digits=10, decimal_places=2, read_only=True)
+
+    class Meta:
+        model = OrderItem
+        fields = ['id', 'product_name', 'product_image', 'product_price', 'quantity', 'total_price']
