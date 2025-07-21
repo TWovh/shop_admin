@@ -18,7 +18,6 @@ import logging
 from .serializers import PaymentSettingsSerializer, PaymentMethodSerializer, PaymentDetailSerializer
 
 logger = logging.getLogger(__name__)
-stripe.api_key = settings.STRIPE_SECRET_KEY
 
 class CreatePaymentView(APIView):
     permission_classes = [IsAdminOrUser]
@@ -179,29 +178,42 @@ class ActivePaymentMethodsAPIView(APIView):
 
 
 def _handle_successful_payment(system, order_id, external_id, raw_data):
+    from decimal import Decimal
+    from .models import Order, Payment
+
     try:
         order = Order.objects.get(id=order_id)
-        payment = Payment.objects.filter(order=order, payment_system=system).first()
-        if payment:
+
+        # Обновим/создадим Payment
+        payment, created = Payment.objects.get_or_create(
+            order=order,
+            payment_system=system,
+            defaults={
+                'user': order.user,
+                'amount': order.total_price or Decimal('0.00'),
+                'external_id': external_id,
+                'raw_response': raw_data,
+                'status': 'paid',
+            }
+        )
+        if not created:
             payment.status = 'paid'
             payment.external_id = external_id
             payment.raw_response = raw_data
             payment.save()
-        else:
-            Payment.objects.create(
-                order=order,
-                user=order.user,
-                amount=order.total_price,
-                payment_system=system,
-                external_id=external_id,
-                raw_response=raw_data,
-                status='paid'
-            )
-        order.status = 'paid'
-        order.save()
+
+        # Обновим статусы заказа
+        if order.payment_status != 'paid':
+            order.payment_status = 'paid'
+            if order.status == 'pending':
+                order.status = 'processing'
+            order.save()
+
+        print(f"✅ Заказ #{order.id} обновлён как оплаченный через {system}")
+
     except Exception as e:
         import traceback
-        logger.error(f"Ошибка обработки оплаты {system}: {e}")
+        logger.error(f"❌ Ошибка обработки оплаты {system}: {e}")
         traceback.print_exc()
 
 
@@ -212,13 +224,8 @@ def stripe_webhook(request):
     if not payment_settings:
         return JsonResponse({'error': 'No active Stripe settings'}, status=400)
 
-    webhook_secret = (
-        os.getenv("STRIPE_WEBHOOK_SECRET_TEST") if payment_settings.sandbox else payment_settings.webhook_secret
-    )
-
-    stripe.api_key = (
-        os.getenv("STRIPE_SECRET_KEY_TEST") if payment_settings.sandbox else payment_settings.secret_key
-    )
+    webhook_secret = payment_settings.webhook_secret
+    stripe.api_key = payment_settings.secret_key
 
     payload = request.body
     sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
@@ -253,8 +260,12 @@ class StripePublicKeyView(APIView):
     renderer_classes = [JSONRenderer]
 
     def get(self, request):
+        payment_settings = PaymentSettings.objects.filter(payment_system='stripe', is_active=True).first()
+        if not payment_settings:
+            return Response({"publicKey": None}, status=404)
+
         return Response({
-            "publicKey": settings.STRIPE_API_KEY  # безопасно возвращаем
+            "publicKey": payment_settings.api_key
         })
 
 
