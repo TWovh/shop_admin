@@ -105,29 +105,35 @@ class FondyClient:
         return hashlib.sha1(sign_string.encode('utf-8')).hexdigest()
 
 class LiqPayClient:
-    API_URL = 'https://www.liqpay.ua/api/3/checkout'
+    API_URL = "https://www.liqpay.ua/api/3/checkout"
+
     def __init__(self, config):
         self.public_key = config.api_key
         self.private_key = config.secret_key
+        self.is_sandbox = config.is_sandbox
 
     def create_form(self, order):
-        # При LiqPay — формируем подпись и data, вернуть их фронту
-        params = {
+        data = {
             "public_key": self.public_key,
             "version": "3",
             "action": "pay",
             "amount": str(order.total_price),
             "currency": "UAH",
-            "description": f"Заказ #{order.id}",
-            "order_id": str(order.id),
-            "server_url": f"{settings.SITE_URL}{reverse('liqpay-webhook')}",
-            "result_url": f"{settings.SITE_URL}{reverse('order-success', args=[order.id])}",
+            "description": f"Оплата заказа #{order.id}",
+            "order_id": f"{order.id}",
+            "language": "uk",
+            "server_url": f"{settings.BACKEND_URL}/api/liqpay/",
+            "result_url": f"{settings.FRONTEND_URL}/order-success/{order.id}",
         }
-        data = json.dumps(params).encode('utf-8')
-        data_b64 = base64.b64encode(data).decode('utf-8')
-        sign = base64.b64encode(hmac.new(self.private_key.encode(),
-                                         data_b64.encode(), hashlib.sha1).digest()).decode('utf-8')
-        return data_b64, sign
+
+        if self.is_sandbox:
+            data["sandbox"] = 1
+
+        data_json = json.dumps(data)
+        data_b64 = base64.b64encode(data_json.encode()).decode()
+        sign_str = self.private_key + data_b64 + self.private_key
+        signature = base64.b64encode(hashlib.sha1(sign_str.encode()).digest()).decode()
+        return data_b64, signature
 
 class PortmoneClient:
     BASE = "https://api.portmone.com.ua/v2/pay"

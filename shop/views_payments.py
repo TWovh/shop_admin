@@ -92,9 +92,7 @@ class CreatePaymentView(APIView):
         elif system == 'liqpay':
             client = LiqPayClient(payment_settings)
             data_b64, sign = client.create_form(order)
-            # сохраним raw = {data, sign}
             raw = {'data': data_b64, 'signature': sign}
-            # вернём оба параметра фронту
             ext_id = order.id
             url = client.API_URL
         elif system == 'portmone':
@@ -318,24 +316,42 @@ class LiqPayWebhookView(APIView):
     def post(self, request, *args, **kwargs):
         data_b64 = request.data.get('data')
         signature = request.data.get('signature')
+
+        if not data_b64 or not signature:
+            return Response({'error': 'Missing data or signature'}, status=400)
+
         payment_settings = PaymentSettings.objects.filter(payment_system='liqpay', is_active=True).first()
         if not payment_settings:
-            return JsonResponse({'error': 'No active LiqPay settings'}, status=400)
+            return Response({'error': 'No active LiqPay settings'}, status=400)
 
-        secret = "test_secret" if payment_settings.sandbox else payment_settings.secret_key
-
+        secret = payment_settings.secret_key
         expected_signature = base64.b64encode(
             hashlib.sha1(f"{secret}{data_b64}{secret}".encode()).digest()
         ).decode()
 
         if signature != expected_signature:
+            logger.warning("❌ Неверная подпись в webhook от LiqPay")
             return Response({'error': 'Invalid signature'}, status=400)
 
-        decoded_data = json.loads(base64.b64decode(data_b64).decode())
-        if decoded_data.get('status') == 'success':
-            _handle_successful_payment('liqpay', decoded_data['order_id'], decoded_data['payment_id'], decoded_data)
+        try:
+            decoded_data = json.loads(base64.b64decode(data_b64).decode())
+            logger.info(f"✅ LiqPay webhook data: {decoded_data}")
+        except Exception as e:
+            logger.error(f"Ошибка при декодировании LiqPay data: {e}")
+            return Response({'error': 'Invalid data payload'}, status=400)
 
-        return Response({'status': 'success'})
+        order_id = decoded_data.get('order_id')
+        payment_id = decoded_data.get('payment_id')
+        status = decoded_data.get('status')
+
+        if not order_id or not payment_id:
+            return Response({'error': 'Missing order_id or payment_id'}, status=400)
+
+        # Считаем успешными как 'success', так и 'sandbox' (в тестах)
+        if status in ['success', 'sandbox']:
+            _handle_successful_payment('liqpay', order_id, payment_id, decoded_data)
+
+        return Response({'status': 'ok'})
 
 
 class PortmoneWebhookView(APIView):
