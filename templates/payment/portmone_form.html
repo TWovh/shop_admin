@@ -1,0 +1,7 @@
+<form id="portmone-payment-form" action="{{ action_url }}" method="POST">
+    {% for key, value in payload.items %}
+        <input type="hidden" name="{{ key }}" value="{{ value }}">
+    {% endfor %}
+    <noscript><input type="submit" value="Перейти к оплате"></noscript>
+</form>
+<script>document.getElementById('portmone-payment-form').submit();</script>

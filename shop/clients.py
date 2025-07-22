@@ -4,6 +4,8 @@ import hmac
 import json
 import requests
 from decimal import Decimal
+
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.conf import settings
 
@@ -136,28 +138,35 @@ class LiqPayClient:
         return data_b64, signature
 
 class PortmoneClient:
-    BASE = "https://api.portmone.com.ua/v2/pay"
+    BASE = "https://www.portmone.com.ua/gateway/"
+
     def __init__(self, config):
         self.merchant_id = config.api_key
         self.secret = config.secret_key
+        self.sandbox = config.sandbox
 
     def create_payment(self, order):
         payload = {
-            "merchant_id": self.merchant_id,
-            "order_id": str(order.id),
-            "amount": str(order.total_price),
-            "currency": "UAH",
-            "description": f"Заказ #{order.id}",
-            "redirect": f"{settings.SITE_URL}{reverse('order-success', args=[order.id])}",
-            "callback": f"{settings.SITE_URL}{reverse('portmone-webhook')}"
+            "payee_id": self.merchant_id,
+            "shop_order_number": str(order.id),
+            "bill_amount": str(order.total_price),
+            "description": f"Оплата заказа №{order.id}",
+            "success_url": f"{settings.SITE_URL}{reverse('order-success', args=[order.id])}",
+            "failure_url": f"{settings.SITE_URL}{reverse('order-failed', args=[order.id])}",
+            "callback_url": f"{settings.SITE_URL}{reverse('portmone-webhook')}",
+            "lang": "UA",
         }
-        # подпись, подобно Fondy
-        sign = self._make_signature(payload)
-        payload['signature'] = sign
-        r = requests.post(self.BASE, json=payload)
-        r.raise_for_status()
-        js = r.json()
-        return js['payment_id'], js['payment_url'], js
+
+        form_html = render_to_string("payments/portmone_form.html", {
+            "action_url": self.BASE,
+            "payload": payload,
+        })
+
+        return {
+            "payment_id": order.id,
+            "payment_html": form_html,
+            "payload": payload
+        }
 
     def _make_signature(self, payload):
         params = [str(payload[k]) for k in sorted(payload) if k!='signature']
