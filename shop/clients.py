@@ -77,34 +77,40 @@ class PayPalClient:
         return external_id, approve, js
 
 class FondyClient:
-    BASE = "https://api.fondy.eu/api/"
     def __init__(self, config):
         self.merchant_id = config.api_key
         self.secret = config.secret_key
+        self.sandbox = config.sandbox
 
     def create_payment(self, order):
-        data = {
+        payload = {
             "order_id": str(order.id),
             "merchant_id": self.merchant_id,
             "currency": "UAH",
-            "amount": int(Decimal(order.total_price) * 100),
-            "order_desc": f"Заказ #{order.id}",
-            "response_url": f"{settings.SITE_URL}{reverse('order-success', args=[order.id])}",
-            "server_callback_url": f"{settings.SITE_URL}{reverse('fondy-webhook')}"
+            "amount": int(Decimal(order.total_price) * 100),  # в копейках
+            "order_desc": f"Оплата заказа №{order.id}",
+            "response_url": f"{settings.FRONTEND_URL}/order/{order.id}/success",
+            "server_callback_url": f"{settings.BACKEND_URL}/api/fondy/webhook/",
+            "lang": "uk"
         }
-        # Signature: SHA1 of sorted values + secret
-        signature = self._make_signature(data)
-        data['signature'] = signature
-        r = requests.post(f"{self.BASE}checkout", json=data)
-        r.raise_for_status()
-        js = r.json()['response']
-        return js['payment_id'], js['checkout_url'], js
 
-    def _make_signature(self, data):
-        # пример: сортировка ключей и формирование строки
-        params = [str(data[k]) for k in sorted(data) if k!='signature']
-        sign_string = '|'.join(params) + f"|{self.secret}"
-        return hashlib.sha1(sign_string.encode('utf-8')).hexdigest()
+        data_encoded = base64.b64encode(json.dumps(payload).encode()).decode()
+        signature = self._make_signature(data_encoded)
+
+        fondy_data = {
+            "data": data_encoded,
+            "signature": signature,
+            "payment_url": "https://pay.fondy.eu/api/checkout/redirect/"
+        }
+
+        print(f"Fondy DATA: {fondy_data['data']}")
+        print(f"Fondy SIGNATURE: {fondy_data['signature']}")
+
+        return fondy_data
+
+    def _make_signature(self, data: str):
+        sign_str = f"{self.secret}|{data}"
+        return hashlib.sha1(sign_str.encode()).hexdigest()
 
 class LiqPayClient:
     API_URL = "https://www.liqpay.ua/api/3/checkout"

@@ -11,7 +11,7 @@ DEBUG = True
 
 
 FRONTEND_URL = "http://localhost:5173"
-BACKEND_URL = "https://1bf302ee7053.ngrok-free.app"
+BACKEND_URL = "https://3e2e14094e5f.ngrok-free.app"
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",  # React dev

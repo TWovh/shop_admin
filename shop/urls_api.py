@@ -20,7 +20,7 @@ from .views import (
 )
 from .views_payments import CreatePaymentView, PaymentMethodsView, PaymentOptionsAPIView, \
     ActivePaymentSystemsView, ActivePaymentMethodsAPIView, stripe_webhook, PayPalWebhookView, FondyWebhookView, \
-    LiqPayWebhookView, PortmoneWebhookView, StripePublicKeyView
+    LiqPayWebhookView, PortmoneWebhookView, StripePublicKeyView, CreateFondyPaymentView
 
 from . import views
 
@@ -50,7 +50,8 @@ api_urlpatterns = [
     path('stripe/webhook/', stripe_webhook, name='stripe-webhook'),
     path('paypal/', PayPalWebhookView.as_view(), name='paypal'),
     path('stripe/public-key/', StripePublicKeyView.as_view(), name='stripe-public-key'),
-    path('fondy/', FondyWebhookView.as_view(), name='fondy'),
+    path('fondy/webhook', FondyWebhookView.as_view(), name='fondy-webhook'),
+    path('fondy/create/', CreateFondyPaymentView.as_view(), name='fondy-create'),
     path('liqpay/', LiqPayWebhookView.as_view(), name='liqpay'),
     path('portmone/', PortmoneWebhookView.as_view(), name='portmone'),
 

@@ -46,3 +46,11 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiY
   "delivery_type": "prepaid",
   "comments": "Будьте аккуратны"
 }
+
+
+### 4 Fondy
+POST https://pay.fondy.eu/api/checkout/redirect/
+Content-Type: application/x-www-form-urlencoded
+
+data=eyJvcmRlcl9pZCI6ICI0MiIsICJtZXJjaGFudF9pZCI6ICIxMzk2NDI0IiwgImN1cnJlbmN5IjogIlVBSCIsICJhbW91bnQiOiAzMDgwMCwgIm9yZGVyX2Rlc2MiOiAiXHUwNDFlXHUwNDNmXHUwNDNiXHUwNDMwXHUwNDQyXHUwNDMwIFx1MDQzN1x1MDQzMFx1MDQzYVx1MDQzMFx1MDQzN1x1MDQzMCBcdTIxMTY0MiIsICJyZXNwb25zZV91cmwiOiAiaHR0cDovL2xvY2FsaG9zdDo1MTczL29yZGVyLzQyL3N1Y2Nlc3MiLCAic2VydmVyX2NhbGxiYWNrX3VybCI6ICJodHRwczovLzNlMmUxNDA5NGU1Zi5uZ3Jvay1mcmVlLmFwcC9hcGkvZm9uZHkvd2ViaG9vay8iLCAibGFuZyI6ICJ1ayJ9
+&signature=e57bdf1a63e5c7ddd6a3b01f0fe266361635636c

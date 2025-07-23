@@ -5,7 +5,7 @@ import os
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.generics import RetrieveAPIView
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.renderers import JSONRenderer
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -284,29 +284,58 @@ class PayPalWebhookView(APIView):
         return Response({'status': 'success'})
 
 
+class CreateFondyPaymentView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            order_id = request.data.get('order_id')
+            order = Order.objects.get(id=order_id, user=request.user)
+
+            cfg = PaymentSettings.objects.filter(payment_system='fondy', is_active=True).first()
+            if not cfg:
+                return Response({'error': 'Fondy settings not found'}, status=400)
+
+            client = FondyClient(cfg)
+            fondy_data = client.create_payment(order)
+
+            return Response({
+                "data": fondy_data["data"],
+                "signature": fondy_data["signature"],
+                "payment_url": fondy_data["payment_url"]
+            })
+
+        except Order.DoesNotExist:
+            return Response({'error': 'Order not found'}, status=404)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response({'error': str(e)}, status=500)
+
+
 class FondyWebhookView(APIView):
     authentication_classes = []
     permission_classes = []
 
     def post(self, request, *args, **kwargs):
         data = request.data.get('response') or request.data
-        payment_settings = PaymentSettings.objects.filter(payment_system='fondy', is_active=True).first()
-        if not payment_settings:
+
+        cfg = PaymentSettings.objects.filter(payment_system='fondy', is_active=True).first()
+        if not cfg:
             return JsonResponse({'error': 'No active Fondy settings'}, status=400)
 
-        secret = "test_secret" if payment_settings.sandbox else payment_settings.secret_key
-
+        secret = cfg.secret_key if not cfg.sandbox else "test"
         sign_fields = ['order_id', 'merchant_id', 'amount', 'currency', 'order_status']
-        sign_string = '|'.join(data[k] for k in sign_fields) + f"|{secret}"
+        sign_string = '|'.join([str(data.get(k, '')) for k in sign_fields]) + f"|{secret}"
         signature = hashlib.sha1(sign_string.encode()).hexdigest()
 
         if data.get('signature') != signature:
-            return Response({'error': 'Invalid signature'}, status=400)
+            return JsonResponse({'error': 'Invalid signature'}, status=400)
 
         if data.get('order_status') == 'approved':
-            _handle_successful_payment('fondy', data['order_id'], data['payment_id'], data)
+            _handle_successful_payment('fondy', data['order_id'], data.get('payment_id'), data)
 
-        return Response({'status': 'success'})
+        return JsonResponse({'status': 'success'})
 
 
 class LiqPayWebhookView(APIView):
