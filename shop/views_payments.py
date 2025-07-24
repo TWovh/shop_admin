@@ -2,8 +2,12 @@ import base64
 import hashlib
 import json
 import os
+import traceback
+
 from django.http import JsonResponse, HttpResponse
+from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
+from rest_framework import status
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.renderers import JSONRenderer
@@ -162,10 +166,13 @@ class PaymentOptionsAPIView(APIView):
 
 
 class ActivePaymentSystemsView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
-        active_payments = PaymentSettings.objects.filter(is_active=True)
-        serializer = PaymentSettingsSerializer(active_payments, many=True)
+        active = PaymentSettings.objects.filter(is_active=True)
+        serializer = PaymentSettingsSerializer(active, many=True)
         return Response(serializer.data)
+
 
 class ActivePaymentMethodsAPIView(APIView):
     def get(self, request):
@@ -388,19 +395,61 @@ class PortmoneWebhookView(APIView):
     permission_classes = []
 
     def post(self, request, *args, **kwargs):
+        logger.info("Portmone webhook called")
+
         data = request.data
+        logger.info(f"Incoming data: {data}")
+
         payment_settings = PaymentSettings.objects.filter(payment_system='portmone', is_active=True).first()
         if not payment_settings:
+            logger.error("No active Portmone settings found")
             return JsonResponse({'error': 'No active Portmone settings'}, status=400)
 
         secret = "test_secret" if payment_settings.sandbox else payment_settings.secret_key
         sign_data = '|'.join(str(data[k]) for k in sorted(data) if k != 'signature') + f"|{secret}"
         expected_signature = hashlib.sha1(sign_data.encode()).hexdigest()
 
+        logger.info(f"Expected signature: {expected_signature}")
+        logger.info(f"Received signature: {data.get('signature')}")
+
         if data.get('signature') != expected_signature:
+            logger.warning("Invalid signature")
             return Response({'error': 'Invalid signature'}, status=400)
 
         if data.get('status') == 'success':
-            _handle_successful_payment('portmone', data['order_id'], data['payment_id'], data)
+            logger.info("Successful payment received, calling _handle_successful_payment")
+            _handle_successful_payment(
+                system='portmone',
+                order_id=data.get('order_id'),
+                external_id=data.get('payment_id'),
+                raw_data=data
+            )
+        else:
+            logger.info(f"Unhandled payment status: {data.get('status')}")
 
         return Response({'status': 'success'})
+
+
+class CreatePortmonePaymentView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        order_id = request.data.get("order_id")
+        order = get_object_or_404(Order, id=order_id, user=request.user)
+
+        config = PaymentSettings.objects.filter(payment_system="portmone", is_active=True).first()
+        if not config:
+            return Response({"error": "Portmone is not configured"}, status=400)
+
+        try:
+            client = PortmoneClient(config)
+            result = client.create_payment(order)
+
+            return Response({
+                "payment_id": result["payment_id"],
+                "html_form": result["payment_html"]
+            })
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response({"error": str(e)}, status=500)

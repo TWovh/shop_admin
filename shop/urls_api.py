@@ -20,7 +20,7 @@ from .views import (
 )
 from .views_payments import CreatePaymentView, PaymentMethodsView, PaymentOptionsAPIView, \
     ActivePaymentSystemsView, ActivePaymentMethodsAPIView, stripe_webhook, PayPalWebhookView, FondyWebhookView, \
-    LiqPayWebhookView, PortmoneWebhookView, StripePublicKeyView, CreateFondyPaymentView
+    LiqPayWebhookView, PortmoneWebhookView, StripePublicKeyView, CreateFondyPaymentView, CreatePortmonePaymentView
 
 from . import views
 
@@ -45,7 +45,7 @@ api_urlpatterns = [
     path('orders/<int:order_id>/pay/', CreatePaymentView.as_view(), name='create-payment'),
     path('payment-methods/', PaymentMethodsView.as_view(), name='payment-methods'),
     path('payments/options/', PaymentOptionsAPIView.as_view(), name='payment-options'),#для фронта
-    path('api/payment-systems/', ActivePaymentSystemsView.as_view(), name='active-payment-systems'), #только актив
+    path('payment-systems/', ActivePaymentSystemsView.as_view(), name='active-payment-systems'), #только актив
     path('payment-methods/active/', ActivePaymentMethodsAPIView.as_view(), name='active-payment-methods'),
     path('stripe/webhook/', stripe_webhook, name='stripe-webhook'),
     path('paypal/', PayPalWebhookView.as_view(), name='paypal'),
@@ -53,7 +53,8 @@ api_urlpatterns = [
     path('fondy/webhook', FondyWebhookView.as_view(), name='fondy-webhook'),
     path('fondy/create/', CreateFondyPaymentView.as_view(), name='fondy-create'),
     path('liqpay/', LiqPayWebhookView.as_view(), name='liqpay'),
-    path('portmone/', PortmoneWebhookView.as_view(), name='portmone'),
+    path('portmone/', PortmoneWebhookView.as_view(), name='portmone-webhook'),
+    path("portmone/create/", CreatePortmonePaymentView.as_view(), name="portmone-create"),
 
 
     # Личный кабинет

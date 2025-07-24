@@ -55,12 +55,23 @@ PASSWORD_HASHERS = [
 
 LOGGING = {
     'version': 1,
+    'disable_existing_loggers': False,
     'handlers': {
-        'file': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
             'level': 'DEBUG',
-            'class': 'logging.FileHandler',
-            'filename': 'debug.log',
         },
+    },
+    'formatters': {
+        'simple': {
+            'format': '[{levelname}] {message}',
+            'style': '{',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'DEBUG',
     },
 }
 
@@ -74,6 +85,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
     "rest_framework.authtoken",
     "shop.apps.ShopConfig",
     "django.contrib.humanize",
@@ -133,7 +145,7 @@ EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL')
 ADMIN_EMAIL = os.getenv('ADMIN_EMAIL')
-SITE_URL = 'https://yourdomain.com', 'http://localhost:8000'
+SITE_URL = 'https://9ca2726e118d.ngrok-free.app'
 
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [

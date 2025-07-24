@@ -144,7 +144,8 @@ class LiqPayClient:
         return data_b64, signature
 
 class PortmoneClient:
-    BASE = "https://www.portmone.com.ua/gateway/"
+    SANDBOX_URL = "https://www.portmone.com.ua/gateway/"
+    LIVE_URL = "https://www.portmone.com.ua/r3/pg/"
 
     def __init__(self, config):
         self.merchant_id = config.api_key
@@ -152,19 +153,21 @@ class PortmoneClient:
         self.sandbox = config.sandbox
 
     def create_payment(self, order):
+        action_url = self.SANDBOX_URL# if self.sandbox else self.LIVE_URL
+
         payload = {
             "payee_id": self.merchant_id,
             "shop_order_number": str(order.id),
             "bill_amount": str(order.total_price),
             "description": f"Оплата заказа №{order.id}",
-            "success_url": f"{settings.SITE_URL}{reverse('order-success', args=[order.id])}",
-            "failure_url": f"{settings.SITE_URL}{reverse('order-failed', args=[order.id])}",
+            "success_url": f"{settings.SITE_URL}/order/success/{order.id}/",
+            "failure_url": f"{settings.SITE_URL}/order/failed/{order.id}/",
             "callback_url": f"{settings.SITE_URL}{reverse('portmone-webhook')}",
             "lang": "UA",
         }
 
-        form_html = render_to_string("payments/portmone_form.html", {
-            "action_url": self.BASE,
+        form_html = render_to_string("payment/portmone_form.html", {
+            "action_url": action_url,
             "payload": payload,
         })
 
@@ -175,6 +178,6 @@ class PortmoneClient:
         }
 
     def _make_signature(self, payload):
-        params = [str(payload[k]) for k in sorted(payload) if k!='signature']
+        params = [str(payload[k]) for k in sorted(payload) if k != 'signature']
         s = "|".join(params) + f"|{self.secret}"
         return hashlib.sha1(s.encode()).hexdigest()
