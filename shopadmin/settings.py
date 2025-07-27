@@ -1,6 +1,8 @@
 from pathlib import Path
 import os
 from datetime import timedelta
+
+from corsheaders.defaults import default_headers
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -10,16 +12,18 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = True
 
 
-FRONTEND_URL = "https://955fbdf89c9c.ngrok-free.app"
-BACKEND_URL = "https://36b9c32cc27d.ngrok-free.app"
+FRONTEND_URL = "https://c09fe477149c.ngrok-free.app"
+BACKEND_URL = "https://4a590ab91703.ngrok-free.app"
+SITE_URL = "https://4a590ab91703.ngrok-free.app"
+
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",  # React dev
-    "https://yourfrontend.com",  # боевой фронт
+    FRONTEND_URL,  # боевой фронт
 ]
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",
-    "https://yourfrontend.com",
+    FRONTEND_URL,
 ]
 
 ALLOWED_HOSTS = ['*']
@@ -43,6 +47,10 @@ SESSION_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_SAMESITE = 'Lax'
 # Разрешаем браузеру слать куки
 CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    "ngrok-skip-browser-warning",
+]
 
 
 LOGIN_URL = '/admin/login/'
@@ -145,7 +153,6 @@ EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL')
 ADMIN_EMAIL = os.getenv('ADMIN_EMAIL')
-SITE_URL = 'https://9ca2726e118d.ngrok-free.app'
 
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
