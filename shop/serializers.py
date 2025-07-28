@@ -207,7 +207,7 @@ class DashboardOrderListSerializer(serializers.ModelSerializer):
         ]
 
     def get_item_count(self, obj):
-        return obj.items.count()
+        return obj.order_items.count()
 
 class DashboardOrderDetailSerializer(serializers.ModelSerializer):
     items = serializers.SerializerMethodField()

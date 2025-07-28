@@ -1,6 +1,5 @@
 import base64
 import hashlib
-import hmac
 import json
 import requests
 from decimal import Decimal
@@ -90,7 +89,7 @@ class FondyClient:
             "amount": int(Decimal(order.total_price) * 100),  # в копейках
             "order_desc": f"Оплата заказа №{order.id}",
             "response_url": f"{settings.FRONTEND_URL}/order/{order.id}/success",
-            "server_callback_url": f"{settings.BACKEND_URL}/api/fondy/webhook/",
+            "server_callback_url": f"{settings.BACKEND_URL}/api/fondy/webhook",
             "lang": "uk"
         }
 

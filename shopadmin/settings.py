@@ -12,9 +12,9 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = True
 
 
-FRONTEND_URL = "https://c09fe477149c.ngrok-free.app"
-BACKEND_URL = "https://4a590ab91703.ngrok-free.app"
-SITE_URL = "https://4a590ab91703.ngrok-free.app"
+FRONTEND_URL = "http://localhost:5173"
+BACKEND_URL = "http://127.0.0.1:8000"
+SITE_URL = "http://127.0.0.1:8000"
 
 
 CORS_ALLOWED_ORIGINS = [

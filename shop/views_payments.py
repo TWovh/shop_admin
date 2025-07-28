@@ -1,22 +1,17 @@
 import base64
 import hashlib
 import json
-import os
-import traceback
-
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import get_object_or_404
+from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
-from rest_framework import status
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.renderers import JSONRenderer
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from django.conf import settings
 from .clients import StripeClient, PayPalClient, FondyClient, LiqPayClient, PortmoneClient
 from .models import PaymentSettings, Payment, Order
-import stripe
 from .permissions import IsAdminOrUser
 import logging
 from .serializers import PaymentSettingsSerializer, PaymentMethodSerializer, PaymentDetailSerializer
@@ -320,29 +315,41 @@ class CreateFondyPaymentView(APIView):
             return Response({'error': str(e)}, status=500)
 
 
+@method_decorator(csrf_exempt, name='dispatch')
 class FondyWebhookView(APIView):
     authentication_classes = []
     permission_classes = []
 
     def post(self, request, *args, **kwargs):
-        data = request.data.get('response') or request.data
+        raw_data = request.POST.get('data')
+        signature = request.POST.get('signature')
+
+        if not raw_data or not signature:
+            return JsonResponse({'error': 'Missing data or signature'}, status=400)
+
+        try:
+            decoded_data = json.loads(base64.b64decode(raw_data).decode())
+        except Exception:
+            return JsonResponse({'error': 'Invalid data format'}, status=400)
 
         cfg = PaymentSettings.objects.filter(payment_system='fondy', is_active=True).first()
         if not cfg:
             return JsonResponse({'error': 'No active Fondy settings'}, status=400)
 
         secret = cfg.secret_key if not cfg.sandbox else "test"
-        sign_fields = ['order_id', 'merchant_id', 'amount', 'currency', 'order_status']
-        sign_string = '|'.join([str(data.get(k, '')) for k in sign_fields]) + f"|{secret}"
-        signature = hashlib.sha1(sign_string.encode()).hexdigest()
 
-        if data.get('signature') != signature:
+        sign_fields = ['order_id', 'merchant_id', 'amount', 'currency', 'order_status']
+        sign_string = '|'.join([str(decoded_data.get(k, '')) for k in sign_fields]) + f"|{secret}"
+        expected_signature = hashlib.sha1(sign_string.encode()).hexdigest()
+
+        if signature != expected_signature:
             return JsonResponse({'error': 'Invalid signature'}, status=400)
 
-        if data.get('order_status') == 'approved':
-            _handle_successful_payment('fondy', data['order_id'], data.get('payment_id'), data)
+        if decoded_data.get('order_status') == 'approved':
+            _handle_successful_payment('fondy', decoded_data['order_id'], decoded_data.get('payment_id'), decoded_data)
 
         return JsonResponse({'status': 'success'})
+
 
 
 class LiqPayWebhookView(APIView):

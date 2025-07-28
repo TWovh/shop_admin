@@ -318,6 +318,7 @@ class Order(models.Model):
         default='prepaid'
     )
     comments = models.TextField(blank=True, null=True, max_length=300)
+    nova_poshta_data = models.JSONField(blank=True, null=True)
 
     class Meta:
         indexes = [
