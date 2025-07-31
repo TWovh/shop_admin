@@ -528,10 +528,12 @@ class Payment(models.Model):
 
 
 class NovaPoshtaSettings(models.Model):
+
     api_key = models.CharField(max_length=255, help_text="API ключ my.novaposhta.ua")
     sender_city_ref = models.CharField(max_length=255, blank=True, null=True, help_text="Ref города отправителя")
     default_sender_name = models.CharField(max_length=255, blank=True, null=True, help_text="Имя отправителя по умолчанию")
     updated_at = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(default=True)
 
     def __str__(self):
         return "Настройки Новой Почты"

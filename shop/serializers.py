@@ -223,17 +223,20 @@ class DashboardOrderDetailSerializer(serializers.ModelSerializer):
         ]
 
     def get_items(self, obj):
-        return [
-            {
-                'product_name': item.product.name,
+        items = []
+        for item in obj.order_items.all():
+            product = item.product
+            main_image = product.images.filter(is_main=True).first()
+            image_url = main_image.image.url if main_image and main_image.image else None
+
+            items.append({
+                'product_name': product.name,
                 'quantity': item.quantity,
                 'price': str(item.price),
                 'total': str(item.total_price),
-                'image': item.product.main_image.url if item.product.main_image else None,
-            }
-            for item in obj.order_items.all()  # или obj.items.all(), в зависимости от related_name
-        ]
-
+                'image': image_url,
+            })
+        return items
     def get_delivery_info(self, obj):
         from .models import NovaPoshtaSettings
 
