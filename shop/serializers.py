@@ -174,7 +174,7 @@ class DashboardOverviewSerializer(serializers.Serializer):
         if last:
             return {
                 'id': last.id,
-                'created_at': last.created_at,
+                'created': last.created,
                 'total_price': str(last.total_price),
                 'payment_status': last.payment_status,
                 'status': last.status,
