@@ -534,6 +534,7 @@ class NovaPoshtaSettings(models.Model):
     default_sender_name = models.CharField(max_length=255, blank=True, null=True, help_text="Имя отправителя по умолчанию")
     updated_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
+    auto_create_ttn = models.BooleanField(default=False, verbose_name="Автоматически создавать ТТН при оплате")
 
     def __str__(self):
         return "Настройки Новой Почты"

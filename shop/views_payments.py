@@ -15,6 +15,7 @@ from .models import PaymentSettings, Payment, Order
 from .permissions import IsAdminOrUser
 import logging
 from .serializers import PaymentSettingsSerializer, PaymentMethodSerializer, PaymentDetailSerializer
+from .utils import send_payment_confirmation_email
 
 logger = logging.getLogger(__name__)
 
@@ -208,6 +209,7 @@ def _handle_successful_payment(system, order_id, external_id, raw_data):
             if order.status == 'pending':
                 order.status = 'processing'
             order.save()
+            send_payment_confirmation_email(order, payment)
 
         print(f"✅ Заказ #{order.id} обновлён как оплаченный через {system}")
 

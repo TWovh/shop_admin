@@ -16,7 +16,8 @@ from .views import (
     LoginView,
     MarkCodRejectedAPIView,
     MarkCodPaidAPIView, LatestOrderView, DashboardOverviewView, DashboardProfileUpdateView, DashboardOrderListView,
-    DashboardOrderDetailView, DashboardOrderPayView, DashboardOrderCancelView,
+    DashboardOrderDetailView, DashboardOrderPayView, DashboardOrderCancelView, SendPasswordResetEmailView,
+    ConfirmPasswordResetView, ChangePasswordView,
 )
 from .views_payments import CreatePaymentView, PaymentMethodsView, PaymentOptionsAPIView, \
     ActivePaymentSystemsView, ActivePaymentMethodsAPIView, stripe_webhook, PayPalWebhookView, FondyWebhookView, \
@@ -64,7 +65,9 @@ api_urlpatterns = [
     path('dashboard/orders/<int:pk>/', DashboardOrderDetailView.as_view(), name='dashboard-order-detail'),
     path('dashboard/orders/<int:pk>/pay/', DashboardOrderPayView.as_view(), name='dashboard-order-pay'),
     path('dashboard/orders/<int:pk>/cancel/', DashboardOrderCancelView.as_view(), name='dashboard-order-cancel'),
-
+    path('password-reset/', SendPasswordResetEmailView.as_view()),
+    path('password-reset/confirm/', ConfirmPasswordResetView.as_view()),
+    path("auth/password/change/", ChangePasswordView.as_view()),
 
 
     # Новая Почта

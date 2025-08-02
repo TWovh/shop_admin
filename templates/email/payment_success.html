@@ -1,19 +1,17 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <title>Успешная оплата</title>
-</head>
-<body>
-    <h2>Спасибо за оплату!</h2>
-    <p>Ваш заказ №{{ order.id }} успешно оплачен.</p>
-    <p><strong>Дата:</strong> {{ payment.created_at }}</p>
-    <p><strong>Сумма:</strong> {{ payment.amount }} UAH</p>
-    <p><strong>Метод оплаты:</strong> {{ payment.payment_system|upper }}</p>
-    <p>Вы можете просмотреть детали заказа по ссылке:</p>
-    <p><a href="{{ site_url }}/profile/orders/{{ order.id }}/">Перейти к заказу</a></p>
+<h2>Спасибо за оплату заказа №{{ order.id }}</h2>
+<p>Мы подтвердили вашу оплату. Детали:</p>
 
-    <hr>
-    <p>Если у вас возникли вопросы, свяжитесь с нами по почте: support@example.com</p>
-</body>
-</html>
+<ul>
+  <li><strong>Сумма:</strong> {{ payment.amount }} грн</li>
+  <li><strong>Система оплаты:</strong> {{ payment.get_payment_system_display }}</li>
+  <li><strong>Номер заказа:</strong> {{ order.id }}</li>
+</ul>
+
+<h3>Состав заказа:</h3>
+<ul>
+{% for item in items %}
+  <li>{{ item.product.name }} × {{ item.quantity }}</li>
+{% endfor %}
+</ul>
+
+<p>С уважением,<br>Команда магазина</p>

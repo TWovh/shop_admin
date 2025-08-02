@@ -1,12 +1,18 @@
+from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.views.generic import ListView, DetailView
+from django.contrib.auth.tokens import default_token_generator
+from django.core.mail import EmailMultiAlternatives
+from django.utils.encoding import force_str, force_bytes
+from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+from django.views.generic import ListView
 from django.contrib.auth import get_user_model, authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import Product, Order, OrderItem, NovaPoshtaSettings
+from .models import Product, Order, NovaPoshtaSettings
 from rest_framework import generics
 from .serializers import ProductSerializer, CategorySerializer, UserSerializer, RegisterSerializer, \
     CurrentUserSerializer, OrderCreateSerializer, DashboardOverviewSerializer, DashboardProfileUpdateSerializer, \
-    DashboardOrderListSerializer, DashboardOrderDetailSerializer
+    DashboardOrderListSerializer, DashboardOrderDetailSerializer, SendPasswordResetEmailSerializer, \
+    ConfirmPasswordResetSerializer, ChangePasswordSerializer
 from .serializers import CartItemSerializer, AddToCartSerializer
 from .models import Category, Cart, CartItem
 from rest_framework import status, viewsets
@@ -409,3 +415,68 @@ class DashboardOrderCancelView(APIView):
             return Response({'detail': 'Заказ отменён'})
         else:
             return Response({'detail': 'Заказ нельзя отменить'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+class ChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = ChangePasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = request.user
+        old_password = serializer.validated_data['old_password']
+        new_password = serializer.validated_data['new_password']
+
+        if not user.check_password(old_password):
+            return Response({"error": "Старый пароль неверен."}, status=400)
+
+        user.set_password(new_password)
+        user.save()
+
+        return Response({"message": "Пароль успешно изменён."})
+
+
+class SendPasswordResetEmailView(APIView):
+    def post(self, request):
+        serializer = SendPasswordResetEmailSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = request.data.get('email')
+        user = User.objects.filter(email=email).first()
+        if user:
+            uid = urlsafe_base64_encode(force_bytes(user.pk))
+            token = default_token_generator.make_token(user)
+            reset_url = f"{settings.FRONTEND_URL}/reset-password/{uid}/{token}/"
+
+            html_content = f"""
+            <p>Привет,</p>
+            <p>Чтобы сбросить пароль, перейдите по ссылке:</p>
+            <a href="{reset_url}">{reset_url}</a>
+            """
+            msg = EmailMultiAlternatives("Сброс пароля", "", to=[email])
+            msg.attach_alternative(html_content, "text/html")
+            msg.send()
+
+        return Response({"message": "Если email существует — письмо отправлено."})
+
+
+class ConfirmPasswordResetView(APIView):
+    def post(self, request):
+        serializer = ConfirmPasswordResetSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        uid = request.data.get('uid')
+        token = request.data.get('token')
+        password = request.data.get('new_password')
+
+        try:
+            uid = force_str(urlsafe_base64_decode(uid))
+            user = User.objects.get(pk=uid)
+        except Exception:
+            return Response({"error": "Недопустимый код."}, status=400)
+
+        if default_token_generator.check_token(user, token):
+            user.set_password(password)
+            user.save()
+            return Response({"message": "Пароль успешно обновлён."})
+        return Response({"error": "Неверный токен."}, status=400)

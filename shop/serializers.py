@@ -263,3 +263,24 @@ class DashboardOrderItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrderItem
         fields = ['id', 'product_name', 'product_image', 'product_price', 'quantity', 'total_price']
+
+
+
+class SendPasswordResetEmailSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+class ConfirmPasswordResetSerializer(serializers.Serializer):
+    uid = serializers.CharField()
+    token = serializers.CharField()
+    new_password = serializers.CharField(min_length=6)
+
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField()
+    new_password = serializers.CharField(min_length=6)
+
+    def validate(self, data):
+        old = data.get('old_password')
+        new = data.get('new_password')
+        if old == new:
+            raise serializers.ValidationError("Новый пароль не должен совпадать со старым.")
+        return data

@@ -1,3 +1,6 @@
+from django.conf import settings
+from django.core.mail import EmailMultiAlternatives
+from django.template.loader import render_to_string
 from .models import NovaPoshtaSettings
 import base64
 import hashlib
@@ -10,6 +13,26 @@ def get_nova_poshta_api_key():
     if settings:
         return settings.api_key
     return None
+
+
+
+def send_payment_confirmation_email(order, payment):
+    subject = f"Оплата заказа #{order.id} подтверждена"
+    to_email = order.email
+    from_email = settings.DEFAULT_FROM_EMAIL
+
+    context = {
+        "order": order,
+        "user": order.user,
+        "items": order.order_items.all(),
+        "payment": payment,
+    }
+
+    html = render_to_string("email/payment_success.html", context)
+    msg = EmailMultiAlternatives(subject, "", from_email, [to_email])
+    msg.attach_alternative(html, "text/html")
+    msg.send()
+
 
 def test_payment_connection(settings):
     try:
@@ -101,3 +124,5 @@ def test_payment_connection(settings):
 
     except Exception as e:
         return False, str(e)
+
+
