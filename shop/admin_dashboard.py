@@ -491,6 +491,19 @@ class DashboardOrderAdmin(admin.ModelAdmin):
                 updated += 1
         self.message_user(request, f"Обновлено {updated} заказов как «Отменён».", messages.WARNING)
 
+    @admin.action(description="Создать ТТН через Nova Poshta")
+    def create_ttn_action(self, request, queryset):
+        from .views import create_ttn
+
+        for order in queryset:
+            if order.delivery_method != 'nova_poshta':
+                self.message_user(request, f"Заказ {order.id} — не требует НП", level=messages.WARNING)
+                continue
+
+            result = create_ttn(order)
+            msg = f"Заказ {order.id}: {result['message']}"
+            self.message_user(request, msg, level=messages.SUCCESS if result["success"] else messages.ERROR)
+
     def payment_status_badge(self, obj):
         colors = {
             'unpaid': 'gray',

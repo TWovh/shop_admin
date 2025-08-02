@@ -308,6 +308,65 @@ class LoginView(APIView):
 def is_nova_poshta_enabled():
     return NovaPoshtaSettings.objects.filter(is_active=True).exists()
 
+def create_ttn(order):
+    from .models import NovaPoshtaSettings
+
+    settings = NovaPoshtaSettings.objects.filter(is_active=True).first()
+    if not settings:
+        return {"success": False, "message": "Nova Poshta не настроена"}
+
+    if order.nova_poshta_data and order.nova_poshta_data.get("ttn"):
+        return {"success": False, "message": "ТТН уже существует"}
+
+    address = order.address or {}
+    recipient_city_ref = address.get("city_ref")
+    recipient_warehouse_ref = address.get("warehouse_ref")
+
+    if not recipient_city_ref or not recipient_warehouse_ref:
+        return {"success": False, "message": "Не указаны город и отделение получателя"}
+
+    payload = {
+        "apiKey": settings.api_key,
+        "modelName": "InternetDocument",
+        "calledMethod": "save",
+        "methodProperties": {
+            "PayerType": "Sender",
+            "PaymentMethod": "Cash",
+            "CargoType": "Parcel",
+            "VolumeGeneral": "0.1",
+            "Weight": "1",  # Можем сделать динамическим в будущем
+            "ServiceType": "WarehouseWarehouse",
+            "SeatsAmount": "1",
+            "Description": "Товары из интернет-магазина",
+            "CitySender": settings.sender_city_ref,
+            "SenderAddress": "",  # можно добавить в настройках, если нужно
+            "ContactSender": settings.default_sender_name or "Отправитель",
+            "SendersPhone": "0500000000",  # можно тоже вынести в настройки
+            "CityRecipient": recipient_city_ref,
+            "RecipientAddress": recipient_warehouse_ref,
+            "ContactRecipient": order.address.get("recipient_name") or "Получатель",
+            "RecipientsPhone": order.address.get("phone") or "0000000000"
+        }
+    }
+
+    try:
+        response = requests.post("https://api.novaposhta.ua/v2.0/json/", json=payload)
+        data = response.json()
+    except Exception as e:
+        return {"success": False, "message": f"Ошибка запроса: {str(e)}"}
+
+    if data.get("success") and data.get("data"):
+        ttn = data["data"][0]["IntDocNumber"]
+        order.nova_poshta_data = {
+            "ttn": ttn,
+            "city": address.get("city_name"),
+            "warehouse": address.get("warehouse_name"),
+            "status": "Ожидает отправки"
+        }
+        order.save()
+        return {"success": True, "ttn": ttn, "message": f"ТТН создана: {ttn}"}
+    else:
+        return {"success": False, "message": data.get("errors") or "Не удалось создать ТТН"}
 
 def get_cities(request):
     api_key = get_nova_poshta_api_key()

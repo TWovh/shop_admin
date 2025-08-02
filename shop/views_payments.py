@@ -11,11 +11,12 @@ from rest_framework.renderers import JSONRenderer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from .clients import StripeClient, PayPalClient, FondyClient, LiqPayClient, PortmoneClient
-from .models import PaymentSettings, Payment, Order
+from .models import PaymentSettings, Payment, Order, NovaPoshtaSettings
 from .permissions import IsAdminOrUser
 import logging
 from .serializers import PaymentSettingsSerializer, PaymentMethodSerializer, PaymentDetailSerializer
 from .utils import send_payment_confirmation_email
+from .views import create_ttn
 
 logger = logging.getLogger(__name__)
 
@@ -251,9 +252,17 @@ def stripe_webhook(request):
             print("⚠️ Нет order_id в metadata!")
             return JsonResponse({'error': 'Missing order_id'}, status=400)
 
-        print("👉 order_id из metadata:", order_id)
-        print("🎯 Запускаем _handle_successful_payment")
+        from .models import Order
+        try:
+            order = Order.objects.get(id=order_id)
+        except Order.DoesNotExist:
+            return JsonResponse({'error': 'Order not found'}, status=404)
+
         _handle_successful_payment('stripe', order_id, session['id'], session)
+        if order.delivery_method == 'nova_poshta':
+            settings = NovaPoshtaSettings.objects.filter(is_active=True).first()
+            if settings and settings.auto_create_ttn:
+                create_ttn(order)
 
     return HttpResponse(status=200)
 

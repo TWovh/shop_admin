@@ -356,6 +356,12 @@ class Order(models.Model):
         self.total_price = total
         self.save()
 
+    def get_np_weight(self):
+        return self.nova_poshta_data.get('weight', '1')
+
+    def get_np_seats(self):
+        return self.nova_poshta_data.get('seats', '1')
+
     def __str__(self):
         return f"Order #{self.pk}"
 
@@ -535,9 +541,12 @@ class NovaPoshtaSettings(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
     auto_create_ttn = models.BooleanField(default=False, verbose_name="Автоматически создавать ТТН при оплате")
+    senders_phone = models.CharField(max_length=20, verbose_name="Телефон отправителя", blank=True, null=True)
 
     def __str__(self):
         return "Настройки Новой Почты"
+
+
 
     def save(self, *args, **kwargs):
         if not self.pk and NovaPoshtaSettings.objects.exists():
