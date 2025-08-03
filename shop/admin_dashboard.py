@@ -496,14 +496,39 @@ class DashboardOrderAdmin(admin.ModelAdmin):
     def create_ttn_action(self, request, queryset):
         from .views import create_ttn
 
+        settings_qs = NovaPoshtaSettings.objects.filter(is_active=True)
+
+        if settings_qs.count() != 1:
+            self.message_user(request, "Настройки Новой Почты не найдены или их несколько", level=messages.ERROR)
+            return
+
+        settings = settings_qs.get()
+
+        if not settings.auto_create_ttn:
+            self.message_user(request, "Автосоздание ТТН отключено в настройках", level=messages.WARNING)
+            return
+
+        success_count = 0
+        fail_count = 0
+
         for order in queryset:
             if order.delivery_method != 'nova_poshta':
-                self.message_user(request, f"Заказ {order.id} — не требует НП", level=messages.WARNING)
                 continue
 
-            result = create_ttn(order)
-            msg = f"Заказ {order.id}: {result['message']}"
-            self.message_user(request, msg, level=messages.SUCCESS if result["success"] else messages.ERROR)
+            result = create_ttn(order, settings=settings)
+
+            if result.get("success"):
+                success_count += 1
+            else:
+                fail_count += 1
+                msg = result.get("message", "Неизвестная ошибка")
+                self.message_user(request, f"Заказ #{order.id}: {msg}", level=messages.WARNING)
+
+        if success_count:
+            self.message_user(request, f"Создано ТТН: {success_count}", level=messages.SUCCESS)
+        if fail_count and not success_count:
+            self.message_user(request, f"Не удалось создать ТТН ни для одного заказа", level=messages.ERROR)
+
 
     def payment_status_badge(self, obj):
         colors = {
@@ -822,9 +847,11 @@ class NovaPoshtaSettingsForm(forms.ModelForm):
 @admin.register(NovaPoshtaSettings, site=admin_site)
 class NovaPoshtaSettingsAdmin(admin.ModelAdmin):
     form = NovaPoshtaSettingsForm
-    list_display = ['masked_api_key', 'sender_city_ref', 'default_sender_name', 'senders_phone', 'auto_create_ttn',
+    list_display = ['masked_api_key', 'sender_city_ref', 'default_sender_name', 'senders_phone',
+                    'auto_create_ttn', 'default_weight', 'default_seats_amount',
                     'updated_at']
     readonly_fields = ['updated_at']
+
 
     def masked_api_key(self, obj):
         if obj.api_key:

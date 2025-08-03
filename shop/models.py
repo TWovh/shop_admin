@@ -551,6 +551,8 @@ class NovaPoshtaSettings(models.Model):
     default_sender_name = models.CharField(max_length=255, blank=True, null=True, help_text="Имя отправителя по умолчанию")
     updated_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
+    default_weight = models.DecimalField(max_digits=5, decimal_places=2, default=1.0, help_text="Вес одной посылки в кг")
+    default_seats_amount = models.PositiveIntegerField(default=1, help_text="Количество мест (посылок)")
     auto_create_ttn = models.BooleanField(default=False, verbose_name="Автоматически создавать ТТН")
     senders_phone = models.CharField(max_length=20, default='0500000000')
 

@@ -311,23 +311,26 @@ def is_nova_poshta_enabled():
 def create_ttn(order, settings=None):
     from .models import NovaPoshtaSettings
 
+    # Получаем настройки только если они не переданы
     if not settings:
-        settings = NovaPoshtaSettings.objects.filter(is_active=True).first()
-    if not settings:
-        return {"success": False, "message": "Nova Poshta не настроена"}
+        active_settings = NovaPoshtaSettings.objects.filter(is_active=True)
+        if active_settings.count() != 1:
+            return {"success": False, "message": "Nova Poshta не настроена"}
+        settings = active_settings.get()
 
+    # Если у заказа уже есть ТТН, не дублируем
     if order.nova_poshta_data and order.nova_poshta_data.get("ttn"):
         return {"success": False, "message": "ТТН уже существует"}
 
+    # Получаем адрес заказа
     address = order.address or {}
     recipient_city_ref = address.get("city_ref")
     recipient_warehouse_ref = address.get("warehouse_ref")
-    recipient_name = address.get("recipient_name", "Получатель")
-    recipient_phone = address.get("phone", "0000000000")
 
     if not recipient_city_ref or not recipient_warehouse_ref:
         return {"success": False, "message": "Не указаны город и отделение получателя"}
 
+    # Формируем payload запроса
     payload = {
         "apiKey": settings.api_key,
         "modelName": "InternetDocument",
@@ -337,27 +340,29 @@ def create_ttn(order, settings=None):
             "PaymentMethod": "Cash",
             "CargoType": "Parcel",
             "VolumeGeneral": "0.1",
-            "Weight": "1",
+            "Weight": str(settings.default_weight),
             "ServiceType": "WarehouseWarehouse",
-            "SeatsAmount": "1",
+            "SeatsAmount": str(settings.default_seats_amount),
             "Description": "Товары из интернет-магазина",
             "CitySender": settings.sender_city_ref,
-            "SenderAddress": "",  # можно расширить позже
+            "SenderAddress": "",
             "ContactSender": settings.default_sender_name or "Отправитель",
             "SendersPhone": settings.senders_phone or "0500000000",
             "CityRecipient": recipient_city_ref,
             "RecipientAddress": recipient_warehouse_ref,
-            "ContactRecipient": recipient_name,
-            "RecipientsPhone": recipient_phone
+            "ContactRecipient": address.get("recipient_name") or "Получатель",
+            "RecipientsPhone": address.get("phone") or "0000000000"
         }
     }
 
+    # Отправляем запрос к API Новой Почты
     try:
         response = requests.post("https://api.novaposhta.ua/v2.0/json/", json=payload)
         data = response.json()
     except Exception as e:
         return {"success": False, "message": f"Ошибка запроса: {str(e)}"}
 
+    # Обрабатываем ответ
     if data.get("success") and data.get("data"):
         ttn = data["data"][0]["IntDocNumber"]
         order.nova_poshta_data = {
@@ -366,11 +371,10 @@ def create_ttn(order, settings=None):
             "warehouse": address.get("warehouse_name"),
             "status": "Ожидает отправки"
         }
-        order.save(update_fields=["nova_poshta_data"])
+        order.save()
         return {"success": True, "ttn": ttn, "message": f"ТТН создана: {ttn}"}
     else:
-        errors = data.get("errors") or ["Не удалось создать ТТН"]
-        return {"success": False, "message": "; ".join(errors)}
+        return {"success": False, "message": data.get("errors") or "Не удалось создать ТТН"}
 
 
 #для фронта

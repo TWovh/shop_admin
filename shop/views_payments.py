@@ -211,8 +211,17 @@ def _handle_successful_payment(system, order_id, external_id, raw_data):
                 order.status = 'processing'
             order.save()
             send_payment_confirmation_email(order, payment)
+            from .models import NovaPoshtaSettings
+            from .views import create_ttn
 
-        print(f"✅ Заказ #{order.id} обновлён как оплаченный через {system}")
+            settings_qs = NovaPoshtaSettings.objects.filter(is_active=True)
+            if settings_qs.count() == 1:
+                settings = settings_qs.get()
+                if settings.auto_create_ttn and order.delivery_method == 'nova_poshta':
+                    result = create_ttn(order, settings=settings)
+                    if not result.get("success"):
+                        print(f"[Nova Poshta] Ошибка создания ТТН для заказа #{order.id}: {result.get('message')}")
+
 
     except Exception as e:
         import traceback
@@ -259,10 +268,6 @@ def stripe_webhook(request):
             return JsonResponse({'error': 'Order not found'}, status=404)
 
         _handle_successful_payment('stripe', order_id, session['id'], session)
-        if order.delivery_method == 'nova_poshta':
-            settings = NovaPoshtaSettings.objects.filter(is_active=True).first()
-            if settings and settings.auto_create_ttn:
-                create_ttn(order)
 
     return HttpResponse(status=200)
 
