@@ -352,18 +352,19 @@ class DashboardOrderAdmin(admin.ModelAdmin):
         'payment_status_badge',
         'delivery_type',
         'total_price_display',
+        'delivery_method',
         'invoice_info',
         'created'
     ]
-    list_filter = ['status', 'payment_status', 'delivery_type']
+    list_filter = ['status', 'payment_status', 'delivery_type', 'delivery_method']
     readonly_fields = ['total_price', 'created', 'updated']
-    search_fields = ['id', 'user__email', 'payments__external_id']
+    search_fields = ['id', 'user__email', 'payments__external_id', 'delivery_type', 'delivery_method']
     inlines = [OrderItemInline]
     actions = ['mark_cod_paid', 'mark_cod_rejected']
 
     fieldsets = (
         (None, {
-            'fields': ('user', 'status', 'payment_status', 'delivery_type')
+            'fields': ('user', 'status', 'payment_status', 'delivery_type', 'delivery_method')
         }),
         ('Контакты', {
             'fields': ('city', 'address', 'phone', 'email')
@@ -809,13 +810,20 @@ class NovaPoshtaSettingsForm(forms.ModelForm):
 
     class Meta:
         model = NovaPoshtaSettings
-        fields = '__all__'
-
+        fields = [
+            'api_key',
+            'sender_city_ref',
+            'default_sender_name',
+            'senders_phone',
+            'auto_create_ttn',
+            'is_active'
+        ]
 
 @admin.register(NovaPoshtaSettings, site=admin_site)
 class NovaPoshtaSettingsAdmin(admin.ModelAdmin):
     form = NovaPoshtaSettingsForm
-    list_display = ['masked_api_key', 'sender_city_ref', 'default_sender_name', 'updated_at']
+    list_display = ['masked_api_key', 'sender_city_ref', 'default_sender_name', 'senders_phone', 'auto_create_ttn',
+                    'updated_at']
     readonly_fields = ['updated_at']
 
     def masked_api_key(self, obj):
@@ -827,6 +835,4 @@ class NovaPoshtaSettingsAdmin(admin.ModelAdmin):
     masked_api_key.short_description = 'API ключ'
 
     def has_add_permission(self, request):
-        if NovaPoshtaSettings.objects.exists():
-            return False
-        return True
+        return not NovaPoshtaSettings.objects.exists()

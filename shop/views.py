@@ -308,10 +308,11 @@ class LoginView(APIView):
 def is_nova_poshta_enabled():
     return NovaPoshtaSettings.objects.filter(is_active=True).exists()
 
-def create_ttn(order):
+def create_ttn(order, settings=None):
     from .models import NovaPoshtaSettings
 
-    settings = NovaPoshtaSettings.objects.filter(is_active=True).first()
+    if not settings:
+        settings = NovaPoshtaSettings.objects.filter(is_active=True).first()
     if not settings:
         return {"success": False, "message": "Nova Poshta не настроена"}
 
@@ -321,6 +322,8 @@ def create_ttn(order):
     address = order.address or {}
     recipient_city_ref = address.get("city_ref")
     recipient_warehouse_ref = address.get("warehouse_ref")
+    recipient_name = address.get("recipient_name", "Получатель")
+    recipient_phone = address.get("phone", "0000000000")
 
     if not recipient_city_ref or not recipient_warehouse_ref:
         return {"success": False, "message": "Не указаны город и отделение получателя"}
@@ -334,18 +337,18 @@ def create_ttn(order):
             "PaymentMethod": "Cash",
             "CargoType": "Parcel",
             "VolumeGeneral": "0.1",
-            "Weight": "1",  # Можем сделать динамическим в будущем
+            "Weight": "1",
             "ServiceType": "WarehouseWarehouse",
             "SeatsAmount": "1",
             "Description": "Товары из интернет-магазина",
             "CitySender": settings.sender_city_ref,
-            "SenderAddress": "",  # можно добавить в настройках, если нужно
+            "SenderAddress": "",  # можно расширить позже
             "ContactSender": settings.default_sender_name or "Отправитель",
-            "SendersPhone": "0500000000",  # можно тоже вынести в настройки
+            "SendersPhone": settings.senders_phone or "0500000000",
             "CityRecipient": recipient_city_ref,
             "RecipientAddress": recipient_warehouse_ref,
-            "ContactRecipient": order.address.get("recipient_name") or "Получатель",
-            "RecipientsPhone": order.address.get("phone") or "0000000000"
+            "ContactRecipient": recipient_name,
+            "RecipientsPhone": recipient_phone
         }
     }
 
@@ -363,11 +366,14 @@ def create_ttn(order):
             "warehouse": address.get("warehouse_name"),
             "status": "Ожидает отправки"
         }
-        order.save()
+        order.save(update_fields=["nova_poshta_data"])
         return {"success": True, "ttn": ttn, "message": f"ТТН создана: {ttn}"}
     else:
-        return {"success": False, "message": data.get("errors") or "Не удалось создать ТТН"}
+        errors = data.get("errors") or ["Не удалось создать ТТН"]
+        return {"success": False, "message": "; ".join(errors)}
 
+
+#для фронта
 def get_cities(request):
     api_key = get_nova_poshta_api_key()
     if not api_key:

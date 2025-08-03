@@ -300,6 +300,12 @@ class Order(models.Model):
         ('refunded', 'Возврат'),
     ]
 
+    DELIVERY_METHOD_CHOICES = [
+        ('nova_poshta', 'Новая Почта'),
+        ('self_pickup', 'Самовывоз'),
+        ('other', 'Другое'),
+    ]
+
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
@@ -316,6 +322,11 @@ class Order(models.Model):
         max_length=20,
         choices=[('prepaid', 'Оплата онлайн'), ('cod', 'Наложенный платеж')],
         default='prepaid'
+    )
+    delivery_method = models.CharField(
+        max_length=30,
+        choices=DELIVERY_METHOD_CHOICES,
+        default='other'
     )
     comments = models.TextField(blank=True, null=True, max_length=300)
     nova_poshta_data = models.JSONField(blank=True, null=True)
@@ -540,8 +551,9 @@ class NovaPoshtaSettings(models.Model):
     default_sender_name = models.CharField(max_length=255, blank=True, null=True, help_text="Имя отправителя по умолчанию")
     updated_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
-    auto_create_ttn = models.BooleanField(default=False, verbose_name="Автоматически создавать ТТН при оплате")
-    senders_phone = models.CharField(max_length=20, verbose_name="Телефон отправителя", blank=True, null=True)
+    auto_create_ttn = models.BooleanField(default=False, verbose_name="Автоматически создавать ТТН")
+    senders_phone = models.CharField(max_length=20, default='0500000000')
+
 
     def __str__(self):
         return "Настройки Новой Почты"
