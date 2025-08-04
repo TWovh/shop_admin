@@ -11,12 +11,11 @@ from rest_framework.renderers import JSONRenderer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from .clients import StripeClient, PayPalClient, FondyClient, LiqPayClient, PortmoneClient
-from .models import PaymentSettings, Payment, Order, NovaPoshtaSettings
+from .models import PaymentSettings, Payment, Order
 from .permissions import IsAdminOrUser
 import logging
 from .serializers import PaymentSettingsSerializer, PaymentMethodSerializer, PaymentDetailSerializer
 from .utils import send_payment_confirmation_email
-from .views import create_ttn
 
 logger = logging.getLogger(__name__)
 

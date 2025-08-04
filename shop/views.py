@@ -1,3 +1,4 @@
+from dal import autocomplete
 from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.tokens import default_token_generator
@@ -345,7 +346,7 @@ def create_ttn(order, settings=None):
             "SeatsAmount": str(settings.default_seats_amount),
             "Description": "Товары из интернет-магазина",
             "CitySender": settings.sender_city_ref,
-            "SenderAddress": "",
+            "SenderAddress": settings.sender_warehouse_ref,
             "ContactSender": settings.default_sender_name or "Отправитель",
             "SendersPhone": settings.senders_phone or "0500000000",
             "CityRecipient": recipient_city_ref,
@@ -418,6 +419,73 @@ def get_warehouses(request):
 
     response = requests.post("https://api.novaposhta.ua/v2.0/json/", json=payload)
     return JsonResponse(response.json())
+
+
+
+
+class CityAutocomplete(autocomplete.Select2ListView):
+    def get_list(self):
+        from .utils import get_nova_poshta_api_key
+        import requests
+
+        api_key = get_nova_poshta_api_key()
+        if not api_key:
+            return []
+
+        q = self.q or ""
+        if not q:
+            return []
+
+        payload = {
+            "apiKey": api_key,
+            "modelName": "Address",
+            "calledMethod": "getCities",
+            "methodProperties": {
+                "FindByString": q,
+            }
+        }
+
+        try:
+            response = requests.post("https://api.novaposhta.ua/v2.0/json/", json=payload, timeout=5)
+            data = response.json()
+            return [
+                (item["Ref"], f"{item['Description']} ({item['AreaDescription']})")
+                for item in data.get("data", [])
+            ]
+        except:
+            return []
+
+
+class WarehouseAutocomplete(autocomplete.Select2ListView):
+    def get_list(self):
+        from .utils import get_nova_poshta_api_key
+        import requests
+
+        api_key = get_nova_poshta_api_key()
+        city_ref = self.forwarded.get("sender_city_ref")
+
+        if not api_key or not city_ref:
+            return []
+
+        payload = {
+            "apiKey": api_key,
+            "modelName": "Address",
+            "calledMethod": "getWarehouses",
+            "methodProperties": {
+                "CityRef": city_ref,
+                "Language": "UA"
+            }
+        }
+
+        try:
+            response = requests.post("https://api.novaposhta.ua/v2.0/json/", json=payload, timeout=5)
+            data = response.json()
+            return [
+                (item["Ref"], item["Description"])
+                for item in data.get("data", [])
+            ]
+        except:
+            return []
 
 
 class DashboardOverviewView(APIView):

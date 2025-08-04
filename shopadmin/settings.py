@@ -98,6 +98,8 @@ INSTALLED_APPS = [
     "shop.apps.ShopConfig",
     "django.contrib.humanize",
     "corsheaders",
+    "dal",
+    "dal_select2",
 
 ]
 

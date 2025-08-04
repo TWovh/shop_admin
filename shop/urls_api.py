@@ -41,6 +41,8 @@ api_urlpatterns = [
     path('orders/', OrderListCreateAPIView.as_view(), name='order-list-create'),
     path('orders/<int:order_id>/', OrderDetailAPIView.as_view(), name='order-detail'),
     path('orders/latest/', LatestOrderView.as_view(), name='latest-order'),
+    path('orders/<int:pk>/mark-cod-paid/', MarkCodPaidAPIView.as_view(), name='mark_cod_paid'),
+    path('orders/<int:pk>/mark-cod-rejected/', MarkCodRejectedAPIView.as_view(), name='mark_cod_rejected'),
 
     # Оплата
     path('orders/<int:order_id>/pay/', CreatePaymentView.as_view(), name='create-payment'),
@@ -73,8 +75,9 @@ api_urlpatterns = [
     # Новая Почта
     path("np/cities/", views.get_cities, name="np_get_cities"),
     path("np/warehouses/", views.get_warehouses, name="np_get_warehouses"),
-    path('orders/<int:pk>/mark-cod-paid/', MarkCodPaidAPIView.as_view(), name='mark_cod_paid'),
-    path('orders/<int:pk>/mark-cod-rejected/', MarkCodRejectedAPIView.as_view(), name='mark_cod_rejected'),
+    path("np-autocomplete/cities/", views.CityAutocomplete.as_view(), name="np_city_autocomplete"),
+    path("np-autocomplete/warehouses/", views.WarehouseAutocomplete.as_view(), name="np_warehouse_autocomplete"),
+
 
 
     #Авторизация

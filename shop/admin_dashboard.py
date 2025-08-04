@@ -1,3 +1,4 @@
+from dal import autocomplete
 from django.db.models.functions import TruncDate
 from django.http import HttpResponseRedirect, JsonResponse
 from django.middleware.csrf import get_token
@@ -833,13 +834,27 @@ class NovaPoshtaSettingsForm(forms.ModelForm):
         help_text="Оставьте пустым, чтобы не менять"
     )
 
+
+    sender_city_ref = forms.CharField(
+        label="Город отправителя (City Ref)",
+        widget=autocomplete.ListSelect2(url="np_city_autocomplete")
+    )
+
+    sender_warehouse_ref = forms.CharField(
+        label="Склад отправителя (Warehouse Ref)",
+        widget=autocomplete.ListSelect2(url="np_warehouse_autocomplete", forward=["sender_city_ref"])
+    )
+
     class Meta:
         model = NovaPoshtaSettings
         fields = [
             'api_key',
             'sender_city_ref',
+            'sender_warehouse_ref',
             'default_sender_name',
             'senders_phone',
+            'default_weight',
+            'default_seats_amount',
             'auto_create_ttn',
             'is_active'
         ]
@@ -847,10 +862,46 @@ class NovaPoshtaSettingsForm(forms.ModelForm):
 @admin.register(NovaPoshtaSettings, site=admin_site)
 class NovaPoshtaSettingsAdmin(admin.ModelAdmin):
     form = NovaPoshtaSettingsForm
-    list_display = ['masked_api_key', 'sender_city_ref', 'default_sender_name', 'senders_phone',
+    list_display = ['masked_api_key', 'sender_city_ref', 'default_sender_name',
+                    'sender_warehouse_ref', 'senders_phone',
                     'auto_create_ttn', 'default_weight', 'default_seats_amount',
                     'updated_at']
-    readonly_fields = ['updated_at']
+    readonly_fields = ['updated_at', 'instruction_block']
+
+    fieldsets = (
+        (None, {
+            'fields': (
+                'api_key',
+                'sender_city_ref',
+                'sender_warehouse_ref',
+                'default_sender_name',
+                'senders_phone',
+                'default_weight',
+                'default_seats_amount',
+                'auto_create_ttn',
+                'is_active',
+                'updated_at',
+                'instruction_block',
+            )
+        }),
+    )
+
+    def instruction_block(self, obj=None):
+        return mark_safe("""
+            <div style="padding: 1em; background: #f8f9fa; border: 1px solid #ddd; border-radius: 8px;">
+                <h4>⚙️ Как настроить Новую Почту:</h4>
+                <ol>
+                    <li><strong>API ключ</strong> — получите в <a href="https://my.novaposhta.ua/settings/index#apiKeys" target="_blank">личном кабинете</a>. После заполнения сохраните и только после этого выберите настройки ниже.</li>
+                    <li><strong>City Ref</strong> — это уникальный идентификатор города отправителя (например, <code>ebc0eda9-93ec-11e3-b441-0050568002cf</code> для Киева).</li>
+                    <li><strong>Warehouse ref</strong> — нужное отделение отправки. Это то отделение, откуда курьер заберёт посылки или куда вы будете их приносить.”</li>
+                    <li><strong>Имя отправителя</strong> и <strong>Телефон</strong>, которые вы укажите, появятся в ТТН.</li>
+                    <li><strong>Вес</strong> и <strong>Количество мест</strong> — по умолчанию для всех заказов.</li>
+                    <li><strong>Автоматическое создание ТТН</strong> — включите, если хотите, чтобы она генерировалась после каждой успешной оплаты.</li>
+                </ol>
+            </div>
+        """)
+
+    instruction_block.short_description = "Инструкция по настройке"
 
 
     def masked_api_key(self, obj):

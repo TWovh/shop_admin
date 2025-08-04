@@ -547,14 +547,15 @@ class Payment(models.Model):
 class NovaPoshtaSettings(models.Model):
 
     api_key = models.CharField(max_length=255, help_text="API ключ my.novaposhta.ua")
-    sender_city_ref = models.CharField(max_length=255, blank=True, null=True, help_text="Ref города отправителя")
-    default_sender_name = models.CharField(max_length=255, blank=True, null=True, help_text="Имя отправителя по умолчанию")
+    sender_warehouse_ref = models.CharField(max_length=64, blank=True, verbose_name="Warehouse Ref(ID)",help_text='Ref(ID) отделения отправителя' )
+    sender_city_ref = models.CharField(max_length=255, blank=True, null=True, verbose_name='City Ref(ID)', help_text="Ref(ID) города отправителя, например: 8d5a980d-391c-11d...")
+    default_sender_name = models.CharField(max_length=255, blank=True, null=True,verbose_name='ФИО отправителя', help_text="ФИО отправителя по умолчанию")
     updated_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
-    default_weight = models.DecimalField(max_digits=5, decimal_places=2, default=1.0, help_text="Вес одной посылки в кг")
-    default_seats_amount = models.PositiveIntegerField(default=1, help_text="Количество мест (посылок)")
+    default_weight = models.DecimalField(max_digits=5, decimal_places=2, default=1.0, verbose_name='Вес посылки', help_text="Вес одной посылки в кг")
+    default_seats_amount = models.PositiveIntegerField(default=1, verbose_name='Количество мест')
     auto_create_ttn = models.BooleanField(default=False, verbose_name="Автоматически создавать ТТН")
-    senders_phone = models.CharField(max_length=20, default='0500000000')
+    senders_phone = models.CharField(max_length=20, default='0500000000',verbose_name="Телефон отправителя" )
 
 
     def __str__(self):
