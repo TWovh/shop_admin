@@ -40,10 +40,19 @@ class ProductSerializer(serializers.ModelSerializer):
         ]
 
     def get_main_image(self, obj):
+        """Получение главного изображения для фронтенда"""
         request = self.context.get('request')
+        
+        # Ищем главное изображение
         main_img = obj.images.filter(is_main=True).first()
         if main_img and main_img.image:
-            return request.build_absolute_uri(main_img.image.url)
+            return request.build_absolute_uri(main_img.image.url) if request else main_img.image.url
+        
+        # Если нет главного, берем первое
+        first_img = obj.images.first()
+        if first_img and first_img.image:
+            return request.build_absolute_uri(first_img.image.url) if request else first_img.image.url
+        
         return None
 
     def validate_price(self, value):
@@ -74,8 +83,19 @@ class OrderSerializer(serializers.ModelSerializer):
         read_only_fields = ['user', 'status', 'total_price', 'created', 'items']
 
     def validate_phone(self, value):
-        if len(value) < 10:
-            raise serializers.ValidationError("Номер телефона слишком короткий")
+        """Улучшенная валидация номера телефона"""
+        import re
+        # Убираем все символы кроме цифр
+        digits_only = re.sub(r'\D', '', value)
+        
+        # Проверяем длину (украинские номера: 10-12 цифр)
+        if len(digits_only) < 10 or len(digits_only) > 12:
+            raise serializers.ValidationError("Номер телефона должен содержать от 10 до 12 цифр")
+        
+        # Проверяем, что номер начинается с кода Украины или местного кода
+        if not (digits_only.startswith('380') or digits_only.startswith('0')):
+            raise serializers.ValidationError("Номер телефона должен начинаться с кода Украины (380) или местного кода (0)")
+        
         return value
 
 

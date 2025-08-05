@@ -57,3 +57,6 @@ nosetests.xml
 *.cover
 /media/
 /staticfiles/
+DEVELOPMENT_SETUP.md
+IMPROVEMENTS.md
+frontend.7z

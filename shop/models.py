@@ -99,15 +99,7 @@ class Product(models.Model):
     name = models.CharField(max_length=200, db_index=True, verbose_name="Название")
     slug = models.SlugField(max_length=200, db_index=True, unique=True)
     stock = models.IntegerField(default=0)
-
-    def image_preview(self):
-        if self.image:
-            return mark_safe(f'<img src="{self.image.url}" width="150" />')
-        return "Нет изображения"
-
-    image_preview.short_description = "Превью"
     description = models.TextField(blank=True)
-
     price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Цена")
     available = models.BooleanField(default=True)
     created = models.DateTimeField(auto_now_add=True)
@@ -126,9 +118,30 @@ class Product(models.Model):
     def __str__(self):
         return self.name
 
+    def image_preview(self):
+        """Превью изображения для админки"""
+        # Получаем главное изображение
+        main_image = self.images.filter(is_main=True).first()
+        if main_image and main_image.image:
+            return mark_safe(f'<img src="{main_image.image.url}" width="150" />')
+        
+        # Если нет главного, берем первое
+        first_image = self.images.first()
+        if first_image and first_image.image:
+            return mark_safe(f'<img src="{first_image.image.url}" width="150" />')
+        
+        return "Нет изображения"
+
+    image_preview.short_description = "Превью"
+
     def clean(self):
         if self.price <= 0:
             raise ValidationError("Цена должна быть положительной")
+        super().clean()
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
 
 class ProductImage(models.Model):
     product = models.ForeignKey('Product', related_name='images', on_delete=models.CASCADE)
@@ -361,11 +374,22 @@ class Order(models.Model):
         )
 
     def update_total_price(self):
+        """Обновление общей стоимости заказа"""
         total = Decimal(0)
         for item in self.order_items.all():
             total += item.total_price
         self.total_price = total
         self.save()
+
+    def clean(self):
+        """Валидация заказа"""
+        if self.total_price and self.total_price <= 0:
+            raise ValidationError("Сумма заказа должна быть положительной")
+        super().clean()
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
 
     def get_np_weight(self):
         return self.nova_poshta_data.get('weight', '1')

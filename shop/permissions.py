@@ -3,8 +3,8 @@ from rest_framework.throttling import UserRateThrottle
 
 
 class CustomPermission(permissions.BasePermission):
-    allowed_roles = ['ADMIN', 'STAFF']  # Значение по умолчанию
-
+    """Базовый класс для кастомных разрешений"""
+    
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
@@ -33,17 +33,22 @@ class CustomPermission(permissions.BasePermission):
 
 
 class IsAdmin(CustomPermission):
+    """Только администраторы"""
     allowed_roles = ['ADMIN']
 
 
 class IsStaff(CustomPermission):
+    """Администраторы и менеджеры"""
     allowed_roles = ['ADMIN', 'STAFF']
 
 
 class IsUser(CustomPermission):
-    allowed_roles = ['USER']
+    """Любой аутентифицированный пользователь (для фронтенда)"""
+    allowed_roles = ['ADMIN', 'STAFF', 'USER']
+
 
 class IsAdminOrUser(permissions.BasePermission):
+    """Администраторы или обычные пользователи"""
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
@@ -53,6 +58,7 @@ class IsAdminOrUser(permissions.BasePermission):
 
 
 class IsOwnerOrAdmin(CustomPermission):
+    """Владелец объекта или администратор"""
     allowed_roles = ['ADMIN']
 
     def has_permission(self, request, view):
@@ -71,14 +77,14 @@ class IsOwnerOrAdmin(CustomPermission):
         return False
 
 
-
 class CartThrottle(UserRateThrottle):
-    """
-    Ограничение частоты запросов для корзины
-    """
-    scope = 'cart'  # Уникальный идентификатор для настроек
-    rate = '10/minute'  # 10 запросов в минуту
+    """Ограничение частоты запросов для корзины"""
+    scope = 'cart'
+    
     def get_rate(self):
-        if self.request.user_role == 'ADMIN':
+        role = getattr(self.request.user, 'role', None)
+        if role == 'ADMIN':
             return '100/minute'  # Админам больше запросов
-        return '10/minute'  # Обычным пользователям меньше
+        elif role == 'STAFF':
+            return '50/minute'   # Менеджерам среднее количество
+        return '10/minute'       # Обычным пользователям меньше

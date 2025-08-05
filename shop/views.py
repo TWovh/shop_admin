@@ -36,7 +36,7 @@ User = get_user_model()
 
 class ProductViewSet(viewsets.ModelViewSet):
     permission_classes = [AllowAny]
-    queryset = Product.objects.filter(available=True)
+    queryset = Product.objects.filter(available=True).prefetch_related('images')
     serializer_class = ProductSerializer
 
     def get_serializer_context(self):

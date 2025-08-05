@@ -8,35 +8,48 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 load_dotenv()
+
+# Безопасность
 SECRET_KEY = os.getenv('SECRET_KEY')
-DEBUG = True
+if not SECRET_KEY:
+    raise ValueError("SECRET_KEY не найден в переменных окружения!")
 
+DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'  # True для разработки
 
-FRONTEND_URL = "http://localhost:5173"
-BACKEND_URL = "http://127.0.0.1:8000"
-SITE_URL = "http://127.0.0.1:8000"
+# URLs
+FRONTEND_URL = os.getenv('FRONTEND_URL', "http://localhost:5173")
+BACKEND_URL = os.getenv('BACKEND_URL', "http://127.0.0.1:8000")
+SITE_URL = os.getenv('SITE_URL', "http://127.0.0.1:8000")
 
-
+# CORS настройки
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",  # React dev
-    FRONTEND_URL,  # боевой фронт
+    "http://localhost:5173",
+    FRONTEND_URL,
 ]
+
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",
     FRONTEND_URL,
 ]
 
-ALLOWED_HOSTS = ['*']
+# Безопасность хостов (для разработки)
+ALLOWED_HOSTS = ['*'] if DEBUG else os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+
+# Модель пользователя
 AUTH_USER_MODEL = 'shop.User'
+
+# Безопасность
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 
-SECURE_SSL_REDIRECT = False  # в проде поменять на True
+# SSL редирект (в продакшене True)
+SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'False').lower() == 'true'
 
 X_FRAME_OPTIONS = 'DENY'
-# Безопасность куки
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
+
+# Безопасность куки (для разработки)
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
 
 # Куки нельзя прочитать из JS
 SESSION_COOKIE_HTTPONLY = True
@@ -45,6 +58,7 @@ CSRF_COOKIE_HTTPONLY = False  # CSRF токен читается React-ом (JS)
 # Не передаются с других сайтов
 SESSION_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_SAMESITE = 'Lax'
+
 # Разрешаем браузеру слать куки
 CORS_ALLOW_CREDENTIALS = True
 
@@ -52,34 +66,80 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
     "ngrok-skip-browser-warning",
 ]
 
-
+# Авторизация
 LOGIN_URL = '/admin/login/'
 LOGIN_REDIRECT_URL = '/admin/'
 LOGOUT_REDIRECT_URL = '/admin/login/'
 
+# Хеширование паролей
 PASSWORD_HASHERS = [
     'django.contrib.auth.hashers.Argon2PasswordHasher',
 ]
 
+# Логирование
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-            'formatter': 'simple',
-            'level': 'DEBUG',
-        },
-    },
     'formatters': {
+        'verbose': {
+            'format': '[{asctime}] {levelname} {name} {message}',
+            'style': '{',
+            'datefmt': '%Y-%m-%d %H:%M:%S',
+        },
         'simple': {
             'format': '[{levelname}] {message}',
             'style': '{',
         },
     },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+            'level': 'DEBUG',
+        },
+        'file': {
+            'class': 'logging.FileHandler',
+            'filename': 'debug.log',
+            'formatter': 'verbose',
+            'level': 'INFO',
+        },
+        'payment_file': {
+            'class': 'logging.FileHandler',
+            'filename': 'payment.log',
+            'formatter': 'verbose',
+            'level': 'INFO',
+        },
+    },
+    'loggers': {
+        'shop.views_payments': {
+            'handlers': ['console', 'payment_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'shop.utils': {
+            'handlers': ['console', 'payment_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'shop.clients': {
+            'handlers': ['console', 'payment_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['console', 'file'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'django.security': {
+            'handlers': ['console', 'file'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+    },
     'root': {
-        'handlers': ['console'],
-        'level': 'DEBUG',
+        'handlers': ['console', 'file'],
+        'level': 'INFO',
     },
 }
 
