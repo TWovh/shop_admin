@@ -316,30 +316,21 @@ def _handle_successful_payment(system, order_id, external_id, raw_data):
             order.save()
             logger.info(f"Updated order {order_id} status to paid")
             
-            # Отправляем email подтверждения
+            # Запускаем асинхронные задачи
             try:
-                send_payment_confirmation_email(order, payment)
-                logger.info(f"Payment confirmation email sent for order {order_id}")
+                from .tasks import send_payment_success_email_task, create_nova_poshta_ttn_task
+                
+                # Отправляем email асинхронно
+                send_payment_success_email_task.delay(order.id)
+                logger.info(f"Payment success email task scheduled for order {order_id}")
+                
+                # Создаем TTN асинхронно (если это Nova Poshta)
+                if order.delivery_method == 'nova_poshta':
+                    create_nova_poshta_ttn_task.delay(order.id)
+                    logger.info(f"Nova Poshta TTN task scheduled for order {order_id}")
+                    
             except Exception as e:
-                logger.error(f"Failed to send payment confirmation email for order {order_id}: {e}")
-            
-            # Автоматическое создание ТТН для Новой Почты
-            try:
-                from .models import NovaPoshtaSettings
-                from .views import create_ttn
-
-                settings_qs = NovaPoshtaSettings.objects.filter(is_active=True)
-                if settings_qs.count() == 1:
-                    settings = settings_qs.get()
-                    if settings.auto_create_ttn and order.delivery_method == 'nova_poshta':
-                        logger.info(f"Attempting to create TTN for order {order_id}")
-                        result = create_ttn(order, settings=settings)
-                        if result.get("success"):
-                            logger.info(f"TTN created successfully for order {order_id}")
-                        else:
-                            logger.warning(f"Failed to create TTN for order {order_id}: {result.get('message')}")
-            except Exception as e:
-                logger.error(f"Error creating TTN for order {order_id}: {e}")
+                logger.error(f"Failed to schedule background tasks for order {order_id}: {e}")
 
         return True
 

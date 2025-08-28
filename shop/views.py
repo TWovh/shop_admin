@@ -34,6 +34,12 @@ from shop.admin_dashboard import admin_site
 User = get_user_model()
 
 
+from .cache import (
+    get_cached_products_list, cache_products_list, 
+    get_cached_product_detail, cache_product_detail,
+    invalidate_product_cache
+)
+
 class ProductViewSet(viewsets.ModelViewSet):
     permission_classes = [AllowAny]
     queryset = Product.objects.filter(available=True).prefetch_related('images')
@@ -43,6 +49,70 @@ class ProductViewSet(viewsets.ModelViewSet):
         context = super().get_serializer_context()
         context.update({"request": self.request})
         return context
+    
+    def list(self, request, *args, **kwargs):
+        """
+        Кэшированный список товаров
+        """
+        # Пытаемся получить из кэша
+        cached_products = get_cached_products_list()
+        if cached_products is not None:
+            return Response(cached_products)
+        
+        # Если нет в кэше, получаем из БД
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        data = serializer.data
+        
+        # Сохраняем в кэш
+        cache_products_list(data)
+        
+        return Response(data)
+    
+    def retrieve(self, request, *args, **kwargs):
+        """
+        Кэшированная детальная информация о товаре
+        """
+        product_id = kwargs.get('pk')
+        
+        # Пытаемся получить из кэша
+        cached_product = get_cached_product_detail(product_id)
+        if cached_product is not None:
+            return Response(cached_product)
+        
+        # Если нет в кэше, получаем из БД
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        data = serializer.data
+        
+        # Сохраняем в кэш
+        cache_product_detail(product_id, data)
+        
+        return Response(data)
+    
+    def update(self, request, *args, **kwargs):
+        """
+        Обновление товара с инвалидацией кэша
+        """
+        response = super().update(request, *args, **kwargs)
+        
+        # Инвалидируем кэш товара
+        product_id = kwargs.get('pk')
+        invalidate_product_cache(product_id)
+        
+        return response
+    
+    def destroy(self, request, *args, **kwargs):
+        """
+        Удаление товара с инвалидацией кэша
+        """
+        product_id = kwargs.get('pk')
+        response = super().destroy(request, *args, **kwargs)
+        
+        # Инвалидируем кэш товара
+        invalidate_product_cache(product_id)
+        
+        return response
 
 
 class CategoryListView(generics.ListAPIView):
@@ -379,12 +449,24 @@ def create_ttn(order, settings=None):
 
 
 #для фронта
+from .cache import (
+    get_cached_nova_poshta_cities, cache_nova_poshta_cities,
+    get_cached_nova_poshta_warehouses, cache_nova_poshta_warehouses
+)
+
 def get_cities(request):
     api_key = get_nova_poshta_api_key()
     if not api_key:
         return JsonResponse({"error": "API ключ не настроен"}, status=400)
 
     search = request.GET.get("search", "")
+    
+    # Пытаемся получить из кэша
+    cached_cities = get_cached_nova_poshta_cities(search)
+    if cached_cities is not None:
+        return JsonResponse(cached_cities)
+    
+    # Если нет в кэше, делаем запрос к API
     payload = {
         "apiKey": api_key,
         "modelName": "Address",
@@ -394,7 +476,12 @@ def get_cities(request):
         }
     }
     response = requests.post("https://api.novaposhta.ua/v2.0/json/", json=payload)
-    return JsonResponse(response.json())
+    data = response.json()
+    
+    # Сохраняем в кэш
+    cache_nova_poshta_cities(search, data)
+    
+    return JsonResponse(data)
 
 
 def get_warehouses(request):
@@ -407,6 +494,11 @@ def get_warehouses(request):
     if not city_ref:
         return JsonResponse({"error": "Не передан city_ref"}, status=400)
 
+    # Пытаемся получить из кэша
+    cached_warehouses = get_cached_nova_poshta_warehouses(city_ref)
+    if cached_warehouses is not None:
+        return JsonResponse(cached_warehouses)
+
     payload = {
         "apiKey": api_key,
         "modelName": "Address",
@@ -418,7 +510,12 @@ def get_warehouses(request):
     }
 
     response = requests.post("https://api.novaposhta.ua/v2.0/json/", json=payload)
-    return JsonResponse(response.json())
+    data = response.json()
+    
+    # Сохраняем в кэш
+    cache_nova_poshta_warehouses(city_ref, data)
+    
+    return JsonResponse(data)
 
 
 

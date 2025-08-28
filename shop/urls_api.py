@@ -25,6 +25,7 @@ from .views_payments import CreatePaymentView, PaymentMethodsView, PaymentOption
     LiqPayWebhookView, PortmoneWebhookView, StripePublicKeyView, CreateFondyPaymentView, CreatePortmonePaymentView
 
 from . import views
+from .test_cache import test_cache_view, clear_test_cache, cache_stats_view
 
 router = DefaultRouter()
 router.register(r'products', ProductViewSet, basename='api-product')
@@ -90,6 +91,11 @@ api_urlpatterns = [
     path('register/', RegisterView.as_view(), name='register'),
     path('user/me/', CurrentUserView.as_view(), name='user_me'),
     path('auth/login/', LoginView.as_view(), name='login'),
+    
+    # Тестовые URL для демонстрации кэширования
+    path('test/cache/', test_cache_view, name='test-cache'),
+    path('test/cache/clear/', clear_test_cache, name='clear-test-cache'),
+    path('test/cache/stats/', cache_stats_view, name='cache-stats'),
 ]
 
 urlpatterns = api_urlpatterns + router.urls
