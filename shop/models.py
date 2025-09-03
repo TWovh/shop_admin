@@ -14,11 +14,18 @@ from decimal import Decimal
 
 class UserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):
+        """
+        Создание пользователя
+        """
         if not email:
             raise ValueError('The Email must be set')
+        
         email = self.normalize_email(email)
         user = self.model(email=email, **extra_fields)
-        user.set_password(password)
+        
+        if password:
+            user.set_password(password)
+        
         user.save()
         return user
 
@@ -32,6 +39,7 @@ class UserManager(BaseUserManager):
             raise ValueError('Superuser must have is_staff=True.')
         if extra_fields.get('is_superuser') is not True:
             raise ValueError('Superuser must have is_superuser=True.')
+        
         return self.create_user(email, password, **extra_fields)
 
 class User(AbstractUser):
@@ -68,8 +76,13 @@ class User(AbstractUser):
         return self.email
 
     def save(self, *args, **kwargs):
+        """
+        Сохранение пользователя
+        """
+        # Валидация пароля
         if self.password and not self.password.startswith(('pbkdf2_sha256$', 'bcrypt$')):
             validate_password(self.password)
+        
         super().save(*args, **kwargs)
 
     def is_admin(self) -> bool:
@@ -140,6 +153,10 @@ class Product(models.Model):
         super().clean()
 
     def save(self, *args, **kwargs):
+        """
+        Сохранение товара
+        """
+        # Валидация перед сохранением
         self.full_clean()
         super().save(*args, **kwargs)
 
@@ -153,6 +170,7 @@ class ProductImage(models.Model):
         # Убедиться, что только одно изображение может быть главным
         if self.is_main:
             ProductImage.objects.filter(product=self.product, is_main=True).update(is_main=False)
+        
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -195,53 +213,162 @@ class Cart(models.Model):
 
     def create_order(self, shipping_address, phone, email, comments=''):
         """
-        Создает заказ из корзины с валидацией
+        Создает заказ из корзины с валидацией в транзакции
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        
         if not self.items.exists():
+            logger.warning(f"Attempted to create order from empty cart for user {self.user.email}")
             raise ValueError("Нельзя создать заказ из пустой корзины")
 
-        with transaction.atomic():
-            order = Order.objects.create(
-                user=self.user,
-                total_price=self.total_price,
-                address=shipping_address,
-                phone=phone,
-                email=email,
-                comments=comments,
-                status='pending'
-            )
+        try:
+            with transaction.atomic():
+                logger.info(f"Starting order creation transaction for user {self.user.email}")
+                
+                # Блокируем корзину для обновления (защита от race conditions)
+                cart = Cart.objects.select_for_update().get(id=self.id)
+                logger.info(f"Locked cart {self.id} for user {self.user.email}")
+                
+                # Проверяем доступность товаров и остатки
+                for item in cart.items.all():
+                    if not item.product.available:
+                        logger.error(f"Product {item.product.name} (ID: {item.product.id}) is not available")
+                        raise ValidationError(f"Товар {item.product.name} недоступен")
+                    
+                    if item.product.stock < item.quantity:
+                        logger.error(f"Insufficient stock for product {item.product.name} (ID: {item.product.id}): requested {item.quantity}, available {item.product.stock}")
+                        raise ValidationError(f"Недостаточно товара {item.product.name} на складе. Запрошено: {item.quantity}, доступно: {item.product.stock}")
+                
+                logger.info(f"Stock validation passed for cart {self.id}")
+                
+                # Создаем заказ
+                order = Order.objects.create(
+                    user=self.user,
+                    total_price=self.total_price,
+                    address=shipping_address,
+                    phone=phone,
+                    email=email,
+                    comments=comments,
+                    status='pending'
+                )
+                logger.info(f"Created order {order.id} with total_price {self.total_price}")
 
-            order_items = [
-                OrderItem(
-                    order=order,
-                    product=item.product,
-                    quantity=item.quantity,
-                    price=item.product.price
-                ) for item in self.items.all()
-            ]
+                # Создаем элементы заказа
+                order_items = [
+                    OrderItem(
+                        order=order,
+                        product=item.product,
+                        quantity=item.quantity,
+                        price=item.product.price
+                    ) for item in cart.items.all()
+                ]
 
-            OrderItem.objects.bulk_create(order_items)
-            self.items.all().delete()
+                OrderItem.objects.bulk_create(order_items)
+                logger.info(f"Created {len(order_items)} order items for order {order.id}")
+
+                # Уменьшаем остатки товаров
+                for item in cart.items.all():
+                    old_stock = item.product.stock
+                    item.product.stock -= item.quantity
+                    item.product.save()
+                    logger.info(f"Updated stock for product {item.product.name} (ID: {item.product.id}): {old_stock} -> {item.product.stock}")
+
+                # Очищаем корзину
+                items_count = cart.items.count()
+                cart.items.all().delete()
+                logger.info(f"Cleared {items_count} items from cart {self.id}")
+
+                logger.info(f"Order creation transaction completed successfully: order_id={order.id}, user={self.user.email}")
+
+        except ValidationError as e:
+            logger.error(f"Validation error during order creation for user {self.user.email}: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error during order creation for user {self.user.email}: {e}", exc_info=True)
+            raise
 
         return order
 
     def add_product(self, product, quantity=1):
-        item, created = CartItem.objects.get_or_create(
-            cart=self,
-            product=product,
-            defaults={'quantity': quantity}
-        )
+        """
+        Добавляет товар в корзину с транзакцией
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            with transaction.atomic():
+                logger.info(f"Adding product {product.name} (ID: {product.id}) x{quantity} to cart {self.id} for user {self.user.email}")
+                
+                # Блокируем корзину для обновления
+                cart = Cart.objects.select_for_update().get(id=self.id)
+                
+                # Проверяем доступность товара
+                if not product.available:
+                    logger.error(f"Product {product.name} (ID: {product.id}) is not available")
+                    raise ValidationError(f"Товар {product.name} недоступен")
+                
+                # Проверяем остатки
+                if product.stock < quantity:
+                    logger.error(f"Insufficient stock for product {product.name} (ID: {product.id}): requested {quantity}, available {product.stock}")
+                    raise ValidationError(f"Недостаточно товара {product.name} на складе. Запрошено: {quantity}, доступно: {product.stock}")
+                
+                # Создаем или обновляем элемент корзины
+                item, created = CartItem.objects.get_or_create(
+                    cart=cart,
+                    product=product,
+                    defaults={'quantity': quantity}
+                )
 
-        if not created:
-            item.quantity += quantity
-            item.save()
-
-        return item
+                if not created:
+                    old_quantity = item.quantity
+                    item.quantity += quantity
+                    item.save()
+                    logger.info(f"Updated cart item {item.id}: quantity {old_quantity} -> {item.quantity}")
+                else:
+                    logger.info(f"Created new cart item {item.id} with quantity {quantity}")
+                
+                logger.info(f"Successfully added product {product.name} to cart {self.id}")
+                return item
+                
+        except ValidationError as e:
+            logger.error(f"Validation error adding product {product.name} to cart {self.id}: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error adding product {product.name} to cart {self.id}: {e}", exc_info=True)
+            raise
 
     def clear(self):
-        """Очистка корзины"""
-        self.items.all().delete()
-        self.save()
+        """
+        Очистка корзины с транзакцией
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            with transaction.atomic():
+                logger.info(f"Starting cart clear transaction for cart {self.id}, user {self.user.email}")
+                
+                # Блокируем корзину для обновления
+                cart = Cart.objects.select_for_update().get(id=self.id)
+                
+                # Получаем количество элементов для логирования
+                items_count = cart.items.count()
+                
+                if items_count == 0:
+                    logger.info(f"Cart {self.id} is already empty")
+                    return
+                
+                # Очищаем корзину
+                cart.items.all().delete()
+                logger.info(f"Cleared {items_count} items from cart {self.id}")
+                
+                logger.info(f"Cart clear transaction completed successfully for cart {self.id}")
+                
+        except Exception as e:
+            logger.error(f"Error clearing cart {self.id}: {e}", exc_info=True)
+            raise
 
 
 class CartItem(models.Model):
@@ -288,7 +415,10 @@ class CartItem(models.Model):
             raise ValidationError("Слишком большое количество товара")
 
     def save(self, *args, **kwargs):
-        """Переопределение save с валидацией"""
+        """
+        Сохранение элемента корзины
+        """
+        # Валидация перед сохранением
         self.full_clean()
         super().save(*args, **kwargs)
 
@@ -374,12 +504,35 @@ class Order(models.Model):
         )
 
     def update_total_price(self):
-        """Обновление общей стоимости заказа"""
-        total = Decimal(0)
-        for item in self.order_items.all():
-            total += item.total_price
-        self.total_price = total
-        self.save()
+        """
+        Обновление общей стоимости заказа с транзакцией
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            with transaction.atomic():
+                logger.info(f"Starting total price update transaction for order {self.id}")
+                
+                # Блокируем заказ для обновления
+                order = Order.objects.select_for_update().get(id=self.id)
+                
+                old_total = order.total_price
+                
+                # Пересчитываем стоимость
+                total = Decimal(0)
+                for item in order.order_items.all():
+                    total += item.total_price
+                
+                order.total_price = total
+                order.save()
+                
+                logger.info(f"Updated order {self.id} total_price: {old_total} -> {total}")
+                logger.info(f"Total price update transaction completed successfully for order {self.id}")
+                
+        except Exception as e:
+            logger.error(f"Error updating total price for order {self.id}: {e}", exc_info=True)
+            raise
 
     def clean(self):
         """Валидация заказа"""
@@ -388,6 +541,10 @@ class Order(models.Model):
         super().clean()
 
     def save(self, *args, **kwargs):
+        """
+        Сохранение заказа
+        """
+        # Валидация перед сохранением
         self.full_clean()
         super().save(*args, **kwargs)
 
@@ -413,8 +570,6 @@ class OrderItem(models.Model):
     @property
     def total_price(self):
         return self.price * self.quantity
-
-    
 
 
 class PaymentSettings(models.Model):
@@ -475,6 +630,9 @@ class PaymentSettings(models.Model):
         self.__original_webhook_secret = self.webhook_secret
 
     def save(self, *args, **kwargs):
+        """
+        Сохранение настроек платежей
+        """
         # Если api_key есть (не пустая строка), и либо _api_key пустое, либо расшифрованное значение отличается — шифруем и записываем
         if self.api_key and (not self._api_key or signing.loads(self._api_key) != self.api_key):
             self._api_key = signing.dumps(self.api_key)
@@ -562,8 +720,13 @@ class Payment(models.Model):
 
 
     def save(self, *args, **kwargs):
+        """
+        Сохранение платежа
+        """
+        # Автоматически устанавливаем пользователя если не указан
         if not self.user and self.order and self.order.user:
             self.user = self.order.user
+        
         super().save(*args, **kwargs)
 
 
@@ -588,8 +751,13 @@ class NovaPoshtaSettings(models.Model):
 
 
     def save(self, *args, **kwargs):
+        """
+        Сохранение настроек Новой Почты
+        """
+        # Проверяем уникальность настроек
         if not self.pk and NovaPoshtaSettings.objects.exists():
             raise ValidationError("Можно создать только одну запись с настройками Новой Почты.")
+        
         return super().save(*args, **kwargs)
 
     class Meta:

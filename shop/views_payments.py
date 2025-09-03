@@ -262,6 +262,7 @@ class ActivePaymentMethodsAPIView(APIView):
 
 def _handle_successful_payment(system, order_id, external_id, raw_data):
     from decimal import Decimal
+    from django.db import transaction
     from .models import Order, Payment
 
     try:
@@ -270,11 +271,10 @@ def _handle_successful_payment(system, order_id, external_id, raw_data):
         # Получаем заказ
         try:
             order = Order.objects.get(id=order_id)
+            logger.info(f"Found order {order_id} with status {order.status}, payment_status {order.payment_status}")
         except Order.DoesNotExist:
             logger.error(f"Order {order_id} not found for payment {system}")
             return False
-        
-        logger.info(f"Found order {order_id} with status {order.status}, payment_status {order.payment_status}")
 
         # Проверяем, не был ли заказ уже оплачен
         existing_payment = Payment.objects.filter(
@@ -286,52 +286,83 @@ def _handle_successful_payment(system, order_id, external_id, raw_data):
             logger.warning(f"Order {order_id} already has paid payment: {existing_payment.id}")
             return True
 
-        # Обновим/создадим Payment
-        payment, created = Payment.objects.get_or_create(
-            order=order,
-            payment_system=system,
-            defaults={
-                'user': order.user,
-                'amount': order.total_price or Decimal('0.00'),
-                'external_id': external_id,
-                'raw_response': raw_data,
-                'status': 'paid',
-            }
-        )
-        
-        if not created:
-            payment.status = 'paid'
-            payment.external_id = external_id
-            payment.raw_response = raw_data
-            payment.save()
-            logger.info(f"Updated existing payment {payment.id} for order {order_id}")
-        else:
-            logger.info(f"Created new payment {payment.id} for order {order_id}")
+        # КРИТИЧНО: Используем транзакцию для атомарности
+        try:
+            with transaction.atomic():
+                logger.info(f"Starting transaction for payment processing: order_id={order_id}")
+                
+                # Блокируем заказ для обновления (защита от race conditions)
+                order = Order.objects.select_for_update().get(id=order_id)
+                logger.info(f"Locked order {order_id} for update")
+                
+                # Обновим/создадим Payment
+                payment, created = Payment.objects.get_or_create(
+                    order=order,
+                    payment_system=system,
+                    defaults={
+                        'user': order.user,
+                        'amount': order.total_price or Decimal('0.00'),
+                        'external_id': external_id,
+                        'raw_response': raw_data,
+                        'status': 'paid',
+                    }
+                )
+                
+                if not created:
+                    payment.status = 'paid'
+                    payment.external_id = external_id
+                    payment.raw_response = raw_data
+                    payment.save()
+                    logger.info(f"Updated existing payment {payment.id} for order {order_id}")
+                else:
+                    logger.info(f"Created new payment {payment.id} for order {order_id}")
 
-        # Обновим статусы заказа
-        if order.payment_status != 'paid':
-            order.payment_status = 'paid'
-            if order.status == 'pending':
-                order.status = 'processing'
-            order.save()
-            logger.info(f"Updated order {order_id} status to paid")
-            
-            # Запускаем асинхронные задачи
-            try:
-                from .tasks import send_payment_success_email_task, create_nova_poshta_ttn_task
-                
-                # Отправляем email асинхронно
-                send_payment_success_email_task.delay(order.id)
-                logger.info(f"Payment success email task scheduled for order {order_id}")
-                
-                # Создаем TTN асинхронно (если это Nova Poshta)
-                if order.delivery_method == 'nova_poshta':
-                    create_nova_poshta_ttn_task.delay(order.id)
-                    logger.info(f"Nova Poshta TTN task scheduled for order {order_id}")
+                # Обновим статусы заказа
+                if order.payment_status != 'paid':
+                    old_payment_status = order.payment_status
+                    old_status = order.status
                     
-            except Exception as e:
-                logger.error(f"Failed to schedule background tasks for order {order_id}: {e}")
+                    order.payment_status = 'paid'
+                    if order.status == 'pending':
+                        order.status = 'processing'
+                    
+                    order.save()
+                    logger.info(f"Updated order {order_id}: payment_status {old_payment_status}->{order.payment_status}, status {old_status}->{order.status}")
+                else:
+                    logger.info(f"Order {order_id} payment_status already 'paid', no update needed")
+                
+                logger.info(f"Transaction completed successfully for order {order_id}")
+                
+        except transaction.TransactionManagementError as e:
+            logger.error(f"Transaction error for order {order_id}: {e}", exc_info=True)
+            return False
+        except Exception as e:
+            logger.error(f"Error during transaction for order {order_id}: {e}", exc_info=True)
+            # Транзакция автоматически откатится
+            return False
+            
+        # Только ПОСЛЕ успешного завершения транзакции запускаем Celery задачи
+        
+        try:
+            from .tasks import send_payment_success_email_task, create_nova_poshta_ttn_task
+            
+            # Отправляем email асинхронно
+            email_task = send_payment_success_email_task.delay(order.id)
+            logger.info(f"Payment success email task scheduled for order {order_id}, task_id: {email_task.id}")
+            
+            # Создаем TTN асинхронно (если это Nova Poshta)
+            if order.delivery_method == 'nova_poshta':
+                ttn_task = create_nova_poshta_ttn_task.delay(order.id)
+                logger.info(f"Nova Poshta TTN task scheduled for order {order_id}, task_id: {ttn_task.id}")
+            else:
+                logger.info(f"Order {order_id} not using Nova Poshta, skipping TTN creation")
+                
+        except Exception as e:
+            logger.error(f"Failed to schedule background tasks for order {order_id}: {e}", exc_info=True)
+            # Фоновые задачи не критичны, основная транзакция уже завершена успешно
+            # Продолжаем выполнение
 
+        logger.info(f"Successfully processed payment {system} for order {order_id}")
         return True
 
     except Exception as e:

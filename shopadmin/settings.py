@@ -14,7 +14,7 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 if not SECRET_KEY:
     raise ValueError("SECRET_KEY не найден в переменных окружения!")
 
-DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'  # True для разработки
+DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'  
 
 # URLs
 FRONTEND_URL = os.getenv('FRONTEND_URL', "http://localhost:5173")
@@ -233,6 +233,8 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'user': '100/hour',  # Лимит по умолчанию
         'cart': '10/minute',  # Лимит для корзины
+        'payment': '10/minute',  # Лимит для платежей
+        'webhook': '100/minute',  # Лимит для вебхуков
     }
 }
 
