@@ -10,6 +10,7 @@ from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.utils.translation import gettext_lazy as _
 from django.contrib.auth.password_validation import validate_password
 from decimal import Decimal
+from datetime import timedelta
 
 
 class UserManager(BaseUserManager):
@@ -211,9 +212,9 @@ class Cart(models.Model):
         """Общее количество товаров в корзине"""
         return self.items.aggregate(total=Sum('quantity'))['total'] or 0
 
-    def create_order(self, shipping_address, phone, email, comments=''):
+    def create_order(self, shipping_address, phone, email, city='', comments=''):
         """
-        Создает заказ из корзины с валидацией в транзакции
+        Создает заказ из корзины с резервацией товаров
         """
         import logging
         logger = logging.getLogger(__name__)
@@ -226,9 +227,12 @@ class Cart(models.Model):
             with transaction.atomic():
                 logger.info(f"Starting order creation transaction for user {self.user.email}")
                 
-                # Блокируем корзину для обновления (защита от race conditions)
+                # Блокируем корзину для обновления
                 cart = Cart.objects.select_for_update().get(id=self.id)
                 logger.info(f"Locked cart {self.id} for user {self.user.email}")
+                
+                # Получаем настройки резервации
+                settings = ReservationSettings.get_settings()
                 
                 # Проверяем доступность товаров и остатки
                 for item in cart.items.all():
@@ -242,6 +246,14 @@ class Cart(models.Model):
                 
                 logger.info(f"Stock validation passed for cart {self.id}")
                 
+                # Резервируем товары только если включена резервация
+                if settings.is_enabled:
+                    for item in cart.items.all():
+                        old_stock = item.product.stock
+                        item.product.stock -= item.quantity
+                        item.product.save()
+                        logger.info(f"Reserved product {item.product.name} (ID: {item.product.id}): stock {old_stock} -> {item.product.stock}")
+                
                 # Создаем заказ
                 order = Order.objects.create(
                     user=self.user,
@@ -249,10 +261,16 @@ class Cart(models.Model):
                     address=shipping_address,
                     phone=phone,
                     email=email,
+                    city=city,
                     comments=comments,
                     status='pending'
                 )
-                logger.info(f"Created order {order.id} with total_price {self.total_price}")
+                
+                # Устанавливаем время резервации
+                order.set_reservation_time()
+                order.save()
+                
+                logger.info(f"Created order {order.id} with total_price {self.total_price}, reservation: {order.reserved_until}")
 
                 # Создаем элементы заказа
                 order_items = [
@@ -266,13 +284,6 @@ class Cart(models.Model):
 
                 OrderItem.objects.bulk_create(order_items)
                 logger.info(f"Created {len(order_items)} order items for order {order.id}")
-
-                # Уменьшаем остатки товаров
-                for item in cart.items.all():
-                    old_stock = item.product.stock
-                    item.product.stock -= item.quantity
-                    item.product.save()
-                    logger.info(f"Updated stock for product {item.product.name} (ID: {item.product.id}): {old_stock} -> {item.product.stock}")
 
                 # Очищаем корзину
                 items_count = cart.items.count()
@@ -473,6 +484,81 @@ class Order(models.Model):
     )
     comments = models.TextField(blank=True, null=True, max_length=300)
     nova_poshta_data = models.JSONField(blank=True, null=True)
+    reserved_until = models.DateTimeField(
+        null=True, 
+        blank=True,
+        verbose_name='Резерв до',
+        help_text='До какого времени зарезервирован заказ'
+    )
+    
+    def set_reservation_time(self):
+        """Устанавливает время резервации согласно настройкам"""
+        settings = ReservationSettings.get_settings()
+        
+        if settings.is_enabled:
+            self.reserved_until = timezone.now() + timedelta(minutes=settings.reservation_time_minutes)
+        else:
+            self.reserved_until = None
+    
+    def is_reservation_expired(self):
+        """Проверяет, истек ли резерв"""
+        if not self.reserved_until:
+            return False
+        return timezone.now() > self.reserved_until
+    
+    def get_reservation_time_left(self):
+        """Возвращает оставшееся время резерва в минутах"""
+        if not self.reserved_until:
+            return None
+        
+        time_left = self.reserved_until - timezone.now()
+        if time_left.total_seconds() <= 0:
+            return 0
+        
+        return int(time_left.total_seconds() / 60)
+    
+    def cancel_order(self):
+        """
+        Отмена заказа с возвратом товаров
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        if self.status == 'cancelled':
+            logger.info(f"Order {self.id} is already cancelled")
+            return
+        
+        try:
+            with transaction.atomic():
+                logger.info(f"Starting order cancellation for order {self.id}")
+                
+                # Возвращаем товары на склад
+                for item in self.order_items.all():
+                    old_stock = item.product.stock
+                    item.product.stock += item.quantity
+                    item.product.save()
+                    logger.info(f"Returned product {item.product.name} (ID: {item.product.id}): stock {old_stock} -> {item.product.stock}")
+                
+                # Обновляем статус заказа
+                self.status = 'cancelled'
+                self.reserved_until = None
+                self.save()
+                logger.info(f"Order {self.id} cancelled successfully")
+                
+        except Exception as e:
+            logger.error(f"Error cancelling order {self.id}: {e}", exc_info=True)
+            raise
+    
+    def get_reservation_time_left(self):
+        """Возвращает оставшееся время резерва в минутах"""
+        if not self.reserved_until:
+            return None
+        
+        time_left = self.reserved_until - timezone.now()
+        if time_left.total_seconds() <= 0:
+            return 0
+        
+        return int(time_left.total_seconds() / 60)
 
     class Meta:
         indexes = [
@@ -542,8 +628,20 @@ class Order(models.Model):
 
     def save(self, *args, **kwargs):
         """
-        Сохранение заказа
+        Сохранение заказа с валидацией переходов статусов
         """
+        # Валидация переходов статусов при обновлении
+        if self.pk:  # Только для существующих заказов
+            try:
+                old_order = Order.objects.get(pk=self.pk)
+                if old_order.status != self.status:
+                    # Импортируем валидатор
+                    from .validators import validate_order_status_transition
+                    validate_order_status_transition(old_order.status, self.status)
+            except Order.DoesNotExist:
+                # Заказ не найден - это создание нового заказа
+                pass
+        
         # Валидация перед сохранением
         self.full_clean()
         super().save(*args, **kwargs)
@@ -721,14 +819,88 @@ class Payment(models.Model):
 
     def save(self, *args, **kwargs):
         """
-        Сохранение платежа
+        Сохранение платежа с валидацией переходов статусов
         """
+        # Валидация переходов статусов при обновлении
+        if self.pk:  # Только для существующих платежей
+            try:
+                old_payment = Payment.objects.get(pk=self.pk)
+                if old_payment.status != self.status:
+                    # Импортируем валидатор
+                    from .validators import validate_payment_status_transition
+                    validate_payment_status_transition(old_payment.status, self.status)
+            except Payment.DoesNotExist:
+                # Платеж не найден - это создание нового платежа
+                pass
+        
         # Автоматически устанавливаем пользователя если не указан
         if not self.user and self.order and self.order.user:
             self.user = self.order.user
         
         super().save(*args, **kwargs)
 
+
+
+class ReservationSettings(models.Model):
+    """Настройки резервации товаров"""
+    
+    # Включить/выключить резервацию
+    is_enabled = models.BooleanField(
+        default=True,
+        verbose_name='Включить резервацию товаров',
+        help_text='Если включено, товары резервируются при создании заказа'
+    )
+    
+    # Время резервации в минутах
+    reservation_time_minutes = models.PositiveIntegerField(
+        default=60,
+        verbose_name='Время резервации (минуты)',
+        help_text='На сколько минут резервировать товар при создании заказа'
+    )
+    
+    # Автоматическая отмена неоплаченных заказов
+    auto_cancel_enabled = models.BooleanField(
+        default=True,
+        verbose_name='Автоматическая отмена неоплаченных заказов',
+        help_text='Автоматически отменять заказы с истекшим резервом'
+    )
+    
+    # Интервал проверки истекших резервов (в минутах)
+    cleanup_interval_minutes = models.PositiveIntegerField(
+        default=5,
+        verbose_name='Интервал проверки (минуты)',
+        help_text='Как часто проверять истекшие резервы'
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = 'Настройки резервации'
+        verbose_name_plural = 'Настройки резервации'
+    
+    def __str__(self):
+        return f"Резервация: {'Включена' if self.is_enabled else 'Отключена'} ({self.reservation_time_minutes} мин)"
+    
+    def save(self, *args, **kwargs):
+        # Проверяем уникальность настроек
+        if not self.pk and ReservationSettings.objects.exists():
+            raise ValidationError("Можно создать только одну запись с настройками резервации.")
+        
+        super().save(*args, **kwargs)
+    
+    @classmethod
+    def get_settings(cls):
+        """Получить настройки резервации"""
+        settings, created = cls.objects.get_or_create(
+            defaults={
+                'is_enabled': True,
+                'reservation_time_minutes': 60,
+                'auto_cancel_enabled': True,
+                'cleanup_interval_minutes': 5
+            }
+        )
+        return settings
 
 
 class NovaPoshtaSettings(models.Model):
@@ -763,3 +935,5 @@ class NovaPoshtaSettings(models.Model):
     class Meta:
         verbose_name = "Nova Poshta Настройка"
         verbose_name_plural = "Nova Poshta Настройки"
+
+

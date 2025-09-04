@@ -192,3 +192,38 @@ def send_order_status_update_email_task(self, order_id, old_status, new_status):
         raise self.retry(exc=e)
 
 
+@shared_task
+def cleanup_unpaid_orders_task():
+    """
+    Отмена неоплаченных заказов с истекшим резервом
+    """
+    from datetime import datetime, timedelta
+    
+    # Получаем настройки резервации
+    from .models import ReservationSettings
+    settings = ReservationSettings.get_settings()
+    
+    if not settings.auto_cancel_enabled:
+        logger.info("Auto cancellation is disabled in settings")
+        return "Auto cancellation is disabled"
+    
+    # Находим заказы с истекшим резервом
+    expired_orders = Order.objects.filter(
+        status='pending',
+        payment_status='unpaid',
+        reserved_until__lt=timezone.now()
+    )
+    
+    cancelled_count = 0
+    for order in expired_orders:
+        try:
+            order.cancel_order()
+            cancelled_count += 1
+            logger.info(f"Cancelled expired order {order.id}")
+        except Exception as e:
+            logger.error(f"Error cancelling order {order.id}: {e}")
+    
+    logger.info(f"Cancelled {cancelled_count} expired orders")
+    return f"Cancelled {cancelled_count} expired orders"
+
+

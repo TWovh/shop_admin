@@ -126,14 +126,13 @@ def simulate_expensive_operation():
     }
 
 
+# Импортируем декоратор из cache.py
+from .cache import cache_decorator
+
 @cache_decorator(timeout=60, key_prefix='demo')
 def cached_expensive_operation(operation_type):
     """
     Пример использования декоратора кэширования
     """
     logger.info(f"Выполняется дорогая операция: {operation_type}")
-    return simulate_expensive_operation()
-
-
-# Импортируем декоратор из cache.py
-from .cache import cache_decorator 
+    return simulate_expensive_operation() 

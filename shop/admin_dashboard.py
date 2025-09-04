@@ -9,7 +9,7 @@ from django.utils.timezone import make_aware, now
 from django.views.decorators.csrf import csrf_exempt
 
 from shop.models import Order as ShopOrder
-from .models import Product, Category, Cart, CartItem, User, NovaPoshtaSettings, ProductImage, OrderItem, PaymentSettings, Payment
+from .models import Product, Category, Cart, CartItem, User, NovaPoshtaSettings, ProductImage, OrderItem, PaymentSettings, Payment, ReservationSettings
 from django.contrib import admin
 from django.urls import reverse, path
 from django.db.models import F, DecimalField, Sum, Count, Avg
@@ -229,6 +229,7 @@ class AdminDashboard(admin.AdminSite):
                 'models': [
                     {'name': 'Настройки платежных систем', 'admin_url': reverse('myadmin:shop_paymentsettings_changelist')},
                     {'name': 'Настройки Новой Почты', 'admin_url': reverse('myadmin:shop_novaposhtasettings_changelist')},
+                    {'name': 'Настройки резервации', 'admin_url': reverse('myadmin:shop_reservationsettings_changelist')},
                 ]
             },
             {
@@ -914,3 +915,29 @@ class NovaPoshtaSettingsAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return not NovaPoshtaSettings.objects.exists()
+
+
+@admin.register(ReservationSettings, site=admin_site)
+class ReservationSettingsAdmin(admin.ModelAdmin):
+    list_display = ['is_enabled', 'reservation_time_minutes', 'auto_cancel_enabled', 'cleanup_interval_minutes', 'updated_at']
+    list_editable = ['reservation_time_minutes', 'auto_cancel_enabled', 'cleanup_interval_minutes']
+    list_display_links = ['is_enabled']
+    
+    fieldsets = (
+        ('Основные настройки', {
+            'fields': ('is_enabled', 'reservation_time_minutes'),
+            'description': 'Настройки резервации товаров при создании заказов'
+        }),
+        ('Автоматическая отмена', {
+            'fields': ('auto_cancel_enabled', 'cleanup_interval_minutes'),
+            'description': 'Настройки автоматической отмены неоплаченных заказов'
+        }),
+    )
+    
+    def has_add_permission(self, request):
+        # Разрешаем создание только если нет записей
+        return not ReservationSettings.objects.exists()
+    
+    def has_delete_permission(self, request, obj=None):
+        # Запрещаем удаление настроек
+        return False

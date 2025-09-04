@@ -17,6 +17,10 @@ app.conf.beat_schedule = {
         'task': 'shop.tasks.cleanup_old_orders_task',
         'schedule': 86400.0,  # каждый день
     },
+    'cleanup-unpaid-orders': {
+        'task': 'shop.tasks.cleanup_unpaid_orders_task',
+        'schedule': 300.0,  # каждые 5 минут
+    },
 }
 
 #retry 
