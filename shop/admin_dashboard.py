@@ -907,8 +907,7 @@ class NovaPoshtaSettingsAdmin(admin.ModelAdmin):
 
     def masked_api_key(self, obj):
         if obj.api_key:
-            return '*****'  # или можно показывать первые 4 символа + ****
-            # Например: return obj.api_key[:4] + '****'
+            return '*****'  
         return '-'
 
     masked_api_key.short_description = 'API ключ'

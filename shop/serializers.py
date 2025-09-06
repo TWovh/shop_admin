@@ -304,3 +304,46 @@ class ChangePasswordSerializer(serializers.Serializer):
         if old == new:
             raise serializers.ValidationError("Новый пароль не должен совпадать со старым.")
         return data
+
+
+# Кастомный JWT сериализатор с дополнительными полями
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    """Кастомный сериализатор JWT токенов с дополнительными полями"""
+    
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+        
+        # Добавляем дополнительные поля в токен
+        token['email'] = user.email
+        token['role'] = user.role
+        token['phone'] = user.phone or ''
+        token['is_staff'] = user.is_staff
+        token['is_superuser'] = user.is_superuser
+        
+        # Добавляем разрешения пользователя
+        if user.role == 'ADMIN':
+            token['permissions'] = ['full_access']
+        elif user.role == 'STAFF':
+            token['permissions'] = ['staff_access']
+        else:
+            token['permissions'] = ['user_access']
+        
+        return token
+    
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        
+        # Добавляем информацию о пользователе в ответ
+        data['user'] = {
+            'id': self.user.id,
+            'email': self.user.email,
+            'role': self.user.role,
+            'phone': self.user.phone,
+            'is_staff': self.user.is_staff,
+            'is_superuser': self.user.is_superuser,
+        }
+        
+        return data

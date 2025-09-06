@@ -71,6 +71,7 @@ class User(AbstractUser):
         permissions = [
             ('full_access', 'Full admin access'),
             ('staff_access', 'Staff access'),
+            ('user_access', 'User access'),
         ]
 
     def __str__(self):

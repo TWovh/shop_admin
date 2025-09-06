@@ -1,138 +1,102 @@
 """
-Тестовый файл для демонстрации работы кэширования
+Тесты для системы кэширования
 """
-import time
+from django.test import TestCase, override_settings
 from django.core.cache import cache
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
-import logging
+from django.contrib.auth import get_user_model
+from unittest.mock import patch, MagicMock
 
-logger = logging.getLogger(__name__)
+from shop.cache import (
+    get_cached_products_list, cache_products_list,
+    get_cached_product_detail, cache_product_detail,
+    invalidate_product_cache
+)
+from shop.models import Product, Category
+
+User = get_user_model()
 
 
-@csrf_exempt
-@require_http_methods(["GET"])
-def test_cache_view(request):
-    """
-    Тестовая view для демонстрации кэширования
-    """
-    start_time = time.time()
+class CacheTestCase(TestCase):
+    """Базовый класс для тестов кэширования"""
     
-    # Пытаемся получить из кэша
-    cached_data = cache.get('test:expensive_operation')
+    def setUp(self):
+        cache.clear()
+        
+        self.category = Category.objects.create(
+            name='Тестовая категория',
+            slug='test-category'
+        )
+        
+        self.product = Product.objects.create(
+            name='Тестовый товар',
+            slug='test-product',
+            category=self.category,
+            price=100.00,
+            stock=10,
+            available=True
+        )
+
+
+class ProductsCacheTests(CacheTestCase):
+    """Тесты кэширования списка товаров"""
     
-    if cached_data:
-        # Кэш попадание!
-        response_time = (time.time() - start_time) * 1000
-        logger.info(f"Cache HIT! Response time: {response_time:.2f}ms")
+    def test_cache_products_list(self):
+        """Тест кэширования списка товаров"""
+        products_data = [
+            {
+                'id': self.product.id,
+                'name': self.product.name,
+                'price': str(self.product.price)
+            }
+        ]
         
-        return JsonResponse({
-            'status': 'success',
-            'data': cached_data,
-            'cache': 'HIT',
-            'response_time_ms': round(response_time, 2),
-            'message': 'Данные получены из кэша!'
-        })
-    else:
-        # Кэш промах - имитируем дорогую операцию
-        time.sleep(0.5)  # Имитируем запрос к БД или внешнему API
+        cache_products_list(products_data)
+        cached_data = get_cached_products_list()
         
-        # Генерируем данные
-        data = {
-            'timestamp': time.time(),
-            'message': 'Это дорогая операция, которая выполнилась',
-            'items': [f'item_{i}' for i in range(10)]
+        self.assertIsNotNone(cached_data)
+        self.assertEqual(cached_data, products_data)
+    
+    def test_get_cached_products_list_empty_cache(self):
+        """Тест получения данных из пустого кэша"""
+        cached_data = get_cached_products_list()
+        self.assertIsNone(cached_data)
+
+
+class ProductDetailCacheTests(CacheTestCase):
+    """Тесты кэширования детальной информации о товаре"""
+    
+    def test_cache_product_detail(self):
+        """Тест кэширования детальной информации о товаре"""
+        product_data = {
+            'id': self.product.id,
+            'name': self.product.name,
+            'price': str(self.product.price)
         }
         
-        # Сохраняем в кэш на 30 секунд
-        cache.set('test:expensive_operation', data, timeout=30)
+        cache_product_detail(self.product.id, product_data)
+        cached_data = get_cached_product_detail(self.product.id)
         
-        response_time = (time.time() - start_time) * 1000
-        logger.info(f"Cache MISS! Response time: {response_time:.2f}ms")
-        
-        return JsonResponse({
-            'status': 'success',
-            'data': data,
-            'cache': 'MISS',
-            'response_time_ms': round(response_time, 2),
-            'message': 'Данные получены из БД/API и сохранены в кэш!'
-        })
-
-
-@csrf_exempt
-@require_http_methods(["POST"])
-def clear_test_cache(request):
-    """
-    Очистка тестового кэша
-    """
-    cache.delete('test:expensive_operation')
+        self.assertIsNotNone(cached_data)
+        self.assertEqual(cached_data, product_data)
     
-    return JsonResponse({
-        'status': 'success',
-        'message': 'Тестовый кэш очищен!'
-    })
+    def test_get_cached_product_detail_empty_cache(self):
+        """Тест получения данных из пустого кэша"""
+        cached_data = get_cached_product_detail(999)
+        self.assertIsNone(cached_data)
 
 
-@csrf_exempt
-@require_http_methods(["GET"])
-def cache_stats_view(request):
-    """
-    Статистика кэша
-    """
-    try:
-        # Пытаемся получить статистику Redis
-        info = cache.client.info()
-        stats = {
-            'used_memory': info.get('used_memory_human', 'N/A'),
-            'connected_clients': info.get('connected_clients', 0),
-            'total_commands_processed': info.get('total_commands_processed', 0),
-            'keyspace_hits': info.get('keyspace_hits', 0),
-            'keyspace_misses': info.get('keyspace_misses', 0),
-        }
+class ProductCacheInvalidationTests(CacheTestCase):
+    """Тесты инвалидации кэша товаров"""
+    
+    def test_invalidate_product_cache(self):
+        """Тест инвалидации кэша товара"""
+        product_data = {'id': self.product.id, 'name': self.product.name}
+        cache_product_detail(self.product.id, product_data)
         
-        # Вычисляем hit rate
-        total_requests = stats['keyspace_hits'] + stats['keyspace_misses']
-        if total_requests > 0:
-            hit_rate = (stats['keyspace_hits'] / total_requests) * 100
-        else:
-            hit_rate = 0
-            
-        stats['hit_rate_percent'] = round(hit_rate, 2)
+        cached_data = get_cached_product_detail(self.product.id)
+        self.assertIsNotNone(cached_data)
         
-        return JsonResponse({
-            'status': 'success',
-            'cache_backend': 'Redis',
-            'stats': stats
-        })
+        invalidate_product_cache(self.product.id)
         
-    except Exception as e:
-        return JsonResponse({
-            'status': 'error',
-            'cache_backend': 'Unknown',
-            'message': f'Не удалось получить статистику: {str(e)}'
-        })
-
-
-def simulate_expensive_operation():
-    """
-    Имитация дорогой операции (запрос к БД, внешний API и т.д.)
-    """
-    time.sleep(0.3)  # Имитируем задержку
-    return {
-        'result': 'expensive_data',
-        'timestamp': time.time(),
-        'processing_time': 0.3
-    }
-
-
-# Импортируем декоратор из cache.py
-from ..cache import cache_decorator
-
-@cache_decorator(timeout=60, key_prefix='demo')
-def cached_expensive_operation(operation_type):
-    """
-    Пример использования декоратора кэширования
-    """
-    logger.info(f"Выполняется дорогая операция: {operation_type}")
-    return simulate_expensive_operation() 
+        cached_data = get_cached_product_detail(self.product.id)
+        self.assertIsNone(cached_data)
